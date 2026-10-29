@@ -53,6 +53,10 @@ Composition ids: `ProductPromoReel`, `ProductPromoWide`, `ProductPromoSquare`, `
 }
 ```
 
+`imageUrl` accepts a public URL or a file name inside `<project>/public/` (e.g. `"product.png"`). Product photos are shown with `objectFit: contain`, so they are never cropped.
+
+Remotion merges input props over the template's `defaultProps`, so any field missing from `props.json` falls back to the demo default. Always pass every field; use `""` to hide an optional one (e.g. `"salePrice": ""`).
+
 For WooCommerce, product data can come from the REST API (`/wp-json/wc/v3/products/<id>`): map `name`, `regular_price`, `sale_price`, `images[0].src` into props. Read API keys from environment variables, never hardcode them.
 
 ## Remotion rules (must follow)

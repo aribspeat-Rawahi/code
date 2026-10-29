@@ -5,6 +5,7 @@ import {
   Sequence,
   interpolate,
   spring,
+  staticFile,
   useCurrentFrame,
   useVideoConfig,
 } from 'remotion';
@@ -18,10 +19,14 @@ export type ProductPromoProps = {
   brandColor: string;
 };
 
+// Remote URLs are used as-is; anything else is treated as a file in public/.
+const resolveImage = (src: string) =>
+  /^(https?:|data:)/.test(src) ? src : staticFile(src.replace(/^\/+/, ''));
+
 export const productPromoDefaults: ProductPromoProps = {
   productName: 'Premium Cotton T-Shirt',
   price: '৳1,200',
-  salePrice: '৳899',
+  salePrice: '',
   imageUrl: '',
   ctaText: 'Shop Now',
   brandColor: '#7c3aed',
@@ -49,7 +54,10 @@ const ProductImage: React.FC<{imageUrl?: string; brandColor: string}> = ({
       }}
     >
       {imageUrl ? (
-        <Img src={imageUrl} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+        <Img
+          src={resolveImage(imageUrl)}
+          style={{width: '100%', height: '100%', objectFit: 'contain', padding: '6%'}}
+        />
       ) : null}
     </div>
   );
