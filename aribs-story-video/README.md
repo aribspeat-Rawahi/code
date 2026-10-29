@@ -33,13 +33,19 @@ To use an existing Chrome/Chromium instead of Remotion's download: `REMOTION_BRO
 - Label positions: `src/art/Labels.tsx`. Drawings: `src/art/scenes.tsx`, farmer: `src/art/Farmer.tsx`.
 - Layout boxes and font sizes: `src/components/layout.ts`. Timing: `src/timeline.ts`.
 
-## Audio (optional)
+## Audio and captions
 
-- Background music: put a royalty-free track at `public/music.mp3` (`music.enabled` prop). Fades in over 1 s, out over the last 2 s.
-- Voiceover: `public/vo/01.mp3` … `09.mp3` (included). Dialogue lives in `scripts/voiceover.json`
-  (narrator, farmer Abu Salim, ARIBS driver); regenerate with Kokoro TTS (Apache-2.0) via `scripts/voiceover.py`
-  (setup steps at the top of the script). For the final ad, a recorded human voice in the same files works the same way.
-  When present, each scene lasts at least as long as its voiceover
-  (detected in `calculateMetadata`). Without files the video renders silently.
+Every sound is original: voices from Kokoro TTS (Apache-2.0), music and effects synthesized in code, so the video is royalty-free.
+
+- **Voiceover**: `public/vo/01.mp3` … `09.mp3`. Dialogue (narrator, farmer Abu Salim, ARIBS driver) in `scripts/voiceover.json`;
+  regenerate with `scripts/voiceover.py` (setup at the top of the script). It also writes the caption timings to `src/captions.json`.
+  Each scene lasts at least as long as its voiceover (`calculateMetadata`). A recorded human voice in the same files works the same way.
+- **Music**: `public/music/tender.mp3` (A minor, intro to scene 2), `hope.mp3` (C major, scenes 3–6), `uplift.mp3` (scenes 7–9, outro),
+  cross-faded at the turning points and ducked under the voice. Fade in 1 s, out 2 s. Props: `music.enabled`, `music.volume`.
+- **Sound effects**: `public/sfx/` (whoosh/swoosh on transitions, pops for labels, trunk thuds, van engine and horn, factory hum,
+  water drops, birds, chimes). Props: `sfx.enabled`, `sfx.volume`. Cues per scene in `src/components/Soundtrack.tsx`.
+- Regenerate music and effects: `python3 scripts/audio.py` (needs numpy, soundfile, ffmpeg).
+- **Captions**: burned in under the scene text (`captions` prop). `npm run transcript` writes `transcript/aribs-story.srt`
+  (for YouTube/Facebook upload) and `transcript/aribs-story.txt`.
 
 Fonts (Fraunces 600, Inter 400/600) load from Google Fonts at render time, so the render machine needs internet access.

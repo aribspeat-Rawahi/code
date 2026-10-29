@@ -8,6 +8,7 @@ import type { StoryProps } from "../story";
 import { C } from "../theme";
 import { TRANSITION } from "../timeline";
 import { BOX, useLayout } from "./layout";
+import { Caption } from "./Caption";
 import { Words } from "./Words";
 
 export const Backdrop: React.FC<{ glow: { x: number; y: number; r: number } }> = ({ glow }) => (
@@ -19,7 +20,12 @@ export const Backdrop: React.FC<{ glow: { x: number; y: number; r: number } }> =
   />
 );
 
-export const Scene: React.FC<{ index: number; step: StoryProps["steps"][number]; total: number }> = ({ index, step, total }) => {
+export const Scene: React.FC<{ index: number; step: StoryProps["steps"][number]; total: number; captions: boolean }> = ({
+  index,
+  step,
+  total,
+  captions,
+}) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const layout = useLayout();
@@ -53,7 +59,7 @@ export const Scene: React.FC<{ index: number; step: StoryProps["steps"][number];
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
-          gap: layout === "landscape" ? 30 : 24,
+          gap: layout === "landscape" ? 30 : 20,
         }}
       >
         <div
@@ -88,6 +94,12 @@ export const Scene: React.FC<{ index: number; step: StoryProps["steps"][number];
         >
           {step.text}
         </div>
+        {captions ? (
+          // Fixed-height slot so the text above does not jump when a caption appears
+          <div style={{ height: box.captionBox, display: "flex", alignItems: "flex-start" }}>
+            <Caption index={index} fontSize={box.caption} />
+          </div>
+        ) : null}
       </div>
     </AbsoluteFill>
   );

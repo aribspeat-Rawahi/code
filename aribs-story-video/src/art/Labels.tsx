@@ -186,6 +186,17 @@ const Tag: React.FC<{ text: string; at: P; arrow?: P; delay: number; index: numb
   );
 };
 
+// Seconds into the scene at which each label pops in (used for the pop sound).
+export const labelTimes = (index: number, labels: StepLabels): number[] => {
+  const layout = LAYOUT[index];
+  if (!layout) return [];
+  const times: number[] = [];
+  if (layout.sign && labels.sign) times.push(0.8);
+  labels.tags?.forEach((_, i) => layout.tags && layout.tags[i] && times.push(1.0 + i * 0.25));
+  if (layout.bubble && labels.bubble) times.push(1.3);
+  return times;
+};
+
 export const Labels: React.FC<{ index: number; labels: StepLabels }> = ({ index, labels }) => {
   const layout = LAYOUT[index];
   if (!layout) return null;

@@ -15,12 +15,18 @@ export const BOX = {
     title: 88,
     body: 44,
     counter: 30,
+    caption: 32,
+    captionBox: 190, // room for a speaker label + 3 lines
+
   },
   vertical: {
-    art: { left: 50, top: 130, size: 980 },
-    text: { left: 90, top: 1140, width: 900, height: 530 },
-    title: 84,
-    body: 46,
+    art: { left: 60, top: 120, size: 960 },
+    text: { left: 90, top: 1095, width: 900, height: 575 },
+    title: 80,
+    body: 42,
     counter: 30,
+    caption: 34,
+    captionBox: 150, // room for a speaker label + 2 lines
+
   },
 } as const;

@@ -1,42 +1,96 @@
 {
   "voices": {
-    "narrator": { "voice": "af_heart", "speed": 1.0 },
-    "farmer": { "voice": "am_michael", "speed": 0.95 },
-    "driver": { "voice": "bm_george", "speed": 1.0 }
+    "narrator": {
+      "voice": "af_heart",
+      "speed": 1.0,
+      "label": ""
+    },
+    "farmer": {
+      "voice": "am_michael",
+      "speed": 0.95,
+      "label": "Abu Salim"
+    },
+    "driver": {
+      "voice": "bm_george",
+      "speed": 1.0,
+      "label": "ARIBS driver"
+    }
   },
   "pause": 0.35,
   "scenes": [
     [
-      ["narrator", "Meet Abu Salim. His date palms have stood on this farm for forty years."],
-      ["farmer", "Another season... and still no dates."]
+      [
+        "narrator",
+        "Meet Abu Salim. His date palms have stood on this farm for forty years."
+      ],
+      [
+        "farmer",
+        "Another season... and still no dates."
+      ]
     ],
     [
-      ["farmer", "I cut them down. But now what? I can't sell them, and I can't just burn them."],
-      ["narrator", "Heavy trunks, and nowhere to go."]
+      [
+        "farmer",
+        "I cut them down. But now what? I can't sell them, and I can't just burn them."
+      ],
+      [
+        "narrator",
+        "Heavy trunks, and nowhere to go."
+      ]
     ],
     [
-      ["driver", "Salaam, Abu Salim! Leave those trunks to us."],
-      ["narrator", "ARIBS collects them, right from his farm."]
+      [
+        "driver",
+        "Salaam, Abu Salim! Leave those trunks to us."
+      ],
+      [
+        "narrator",
+        "ARIBS collects them, right from his farm."
+      ]
     ],
     [
-      ["narrator", "At our factory in Barka, palm trunks go in... and natural palm peat comes out."]
+      [
+        "narrator",
+        "At our factory in Barka, palm trunks go in... and natural palm peat comes out."
+      ]
     ],
     [
-      ["narrator", "Packed in sealed two-hundred-litre bags, or supplied loose, by the kilo or the ton."]
+      [
+        "narrator",
+        "Packed in sealed two-hundred-litre bags, or supplied loose, by the kilo or the ton."
+      ]
     ],
     [
-      ["driver", "Abu Salim! Remember your old palms? They're back!"],
-      ["farmer", "Welcome back, my friends!"]
+      [
+        "driver",
+        "Abu Salim! Remember your old palms? They're back!"
+      ],
+      [
+        "farmer",
+        "Welcome back, my friends!"
+      ]
     ],
     [
-      ["narrator", "Mixed into the soil, palm peat holds water longer, so every drop goes further."]
+      [
+        "narrator",
+        "Mixed into the soil, palm peat holds water longer, so every drop goes further."
+      ]
     ],
     [
-      ["farmer", "Look at this! Tomatoes, peppers... my farm is alive again."]
+      [
+        "farmer",
+        "Look at this! Tomatoes, peppers... my farm is alive again."
+      ]
     ],
     [
-      ["farmer", "Shukran, ARIBS!"],
-      ["narrator", "From burden to better soil. ARIBS, helping make Oman greener, one palm at a time."]
+      [
+        "farmer",
+        "Shukran, ARIBS!"
+      ],
+      [
+        "narrator",
+        "From burden to better soil. ARIBS, helping make Oman greener, one palm at a time."
+      ]
     ]
   ]
 }

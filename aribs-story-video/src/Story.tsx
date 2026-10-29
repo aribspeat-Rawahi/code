@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { AbsoluteFill, Audio, Easing, Sequence, cancelRender, continueRender, delayRender, interpolate, staticFile, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Easing, Sequence, cancelRender, continueRender, delayRender, staticFile } from "remotion";
 import { TransitionSeries, linearTiming } from "@remotion/transitions";
 import { slide } from "@remotion/transitions/slide";
-import { CLAMP, pad2 } from "./anim";
+import { pad2 } from "./anim";
 import { Intro } from "./components/Intro";
 import { Outro } from "./components/Outro";
 import { Scene } from "./components/Scene";
+import { IntroSfx, Music, OutroSfx, SceneSfx } from "./components/Soundtrack";
 import type { StoryProps } from "./story";
 import { BAG, LOGO } from "./theme";
 import { TRANSITION, VO_START, getTimeline } from "./timeline";
@@ -31,16 +32,6 @@ const usePreloadImages = () => {
   }, [handle]);
 };
 
-const Music: React.FC<{ file: string; volume: number }> = ({ file, volume }) => {
-  const { durationInFrames, fps } = useVideoConfig();
-  return (
-    <Audio
-      src={staticFile(file)}
-      volume={(f) => interpolate(f, [0, fps, durationInFrames - 2 * fps, durationInFrames], [0, volume, volume, 0], CLAMP)}
-    />
-  );
-};
-
 export const Story: React.FC<StoryProps> = (props) => {
   usePreloadImages();
   const tl = getTimeline(props);
@@ -49,18 +40,22 @@ export const Story: React.FC<StoryProps> = (props) => {
   const parts: React.ReactNode[] = [
     <TransitionSeries.Sequence key="intro" durationInFrames={tl.intro}>
       <Intro title={props.introTitle} />
+      {props.sfx.enabled ? <IntroSfx volume={props.sfx.volume} /> : null}
     </TransitionSeries.Sequence>,
   ];
   steps.forEach((step, i) => {
+    const slideIn = i > 0 && SLIDE_AFTER.has(i - 1);
+    const hasVo = Boolean(props.voiceover && props.voDurations?.[i]);
     parts.push(
-      i > 0 && SLIDE_AFTER.has(i - 1) ? (
+      slideIn ? (
         <TransitionSeries.Transition key={`t${i}`} timing={timing} presentation={slide({ direction: "from-right" })} />
       ) : (
         <TransitionSeries.Transition key={`t${i}`} timing={timing} presentation={circleReveal()} />
       ),
       <TransitionSeries.Sequence key={`s${i}`} durationInFrames={tl.scenes[i]}>
-        <Scene index={i} step={step} total={steps.length} />
-        {props.voiceover && props.voDurations?.[i] ? (
+        <Scene index={i} step={step} total={steps.length} captions={props.captions && hasVo} />
+        {props.sfx.enabled ? <SceneSfx index={i} props={props} slide={slideIn} length={tl.scenes[i]} /> : null}
+        {hasVo ? (
           <Sequence from={VO_START}>
             <Audio src={staticFile(`vo/${pad2(i + 1)}.mp3`)} />
           </Sequence>
@@ -72,13 +67,14 @@ export const Story: React.FC<StoryProps> = (props) => {
     <TransitionSeries.Transition key="t-outro" timing={timing} presentation={circleReveal()} />,
     <TransitionSeries.Sequence key="outro" durationInFrames={tl.outro}>
       <Outro outro={props.outro} />
+      {props.sfx.enabled ? <OutroSfx volume={props.sfx.volume} /> : null}
     </TransitionSeries.Sequence>,
   );
 
   return (
     <AbsoluteFill>
       <TransitionSeries>{parts}</TransitionSeries>
-      {props.music.enabled && props.musicAvailable ? <Music file={props.music.file} volume={props.music.volume} /> : null}
+      {props.music.enabled && props.musicAvailable ? <Music props={props} /> : null}
     </AbsoluteFill>
   );
 };

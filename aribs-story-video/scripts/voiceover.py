@@ -1,4 +1,5 @@
 """Generate public/vo/01.mp3 ... 09.mp3 from scripts/voiceover.json with Kokoro TTS (Apache-2.0).
+Also writes src/captions.json: per scene, each line with its start/end (seconds into that scene's voiceover).
 
 Setup (once):
   python3 -m venv .venv && .venv/bin/pip install kokoro-onnx soundfile
@@ -31,15 +32,21 @@ def main() -> None:
     kokoro = Kokoro(str(models / "kokoro-v1.0.onnx"), str(models / "voices-v1.0.bin"))
     cfg = json.loads((ROOT / "scripts" / "voiceover.json").read_text())
     OUT.mkdir(parents=True, exist_ok=True)
+    captions = []
 
     for i, lines in enumerate(cfg["scenes"], start=1):
         parts = []
         rate = 24000
+        cues = []
+        pos = 0
         for speaker, text in lines:
             v = cfg["voices"][speaker]
             samples, rate = kokoro.create(text, voice=v["voice"], speed=v["speed"], lang="en-us")
+            cues.append({"speaker": v.get("label", ""), "text": text, "start": round(pos / rate, 3), "end": round((pos + len(samples)) / rate, 3)})
+            pos += len(samples) + int(cfg["pause"] * rate)
             parts.append(samples)
             parts.append(np.zeros(int(cfg["pause"] * rate), dtype=samples.dtype))
+        captions.append(cues)
         audio = np.concatenate(parts[:-1])  # drop the trailing pause
 
         with tempfile.NamedTemporaryFile(suffix=".wav") as wav:
@@ -52,6 +59,9 @@ def main() -> None:
                 check=True,
             )
         print(f"{target.relative_to(ROOT)}  {len(audio) / rate:.2f}s")
+
+    (ROOT / "src" / "captions.json").write_text(json.dumps(captions, indent=2, ensure_ascii=False) + "\n")
+    print("src/captions.json")
 
 
 if __name__ == "__main__":

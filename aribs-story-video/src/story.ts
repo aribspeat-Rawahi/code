@@ -27,12 +27,18 @@ export const storySchema = z.object({
     website: z.string(),
     email: z.string(),
   }),
+  // Background music: public/music/{tender,hope,uplift}.mp3 follow the story's mood (scripts/audio.py).
   music: z.object({
     enabled: z.boolean(),
-    // Royalty-free track in public/
-    file: z.string(),
     volume: z.number().min(0).max(1),
   }),
+  // Transition whooshes, pops and scene sounds from public/sfx/
+  sfx: z.object({
+    enabled: z.boolean(),
+    volume: z.number().min(0).max(1),
+  }),
+  // Burned-in captions of the voiceover (timings in src/captions.json)
+  captions: z.boolean(),
   // Plays public/vo/01.mp3 … 09.mp3 when present; scene length then follows the audio.
   voiceover: z.boolean(),
   // Filled in by calculateMetadata (src/Root.tsx); leave empty.
@@ -99,6 +105,8 @@ export const defaultStory: StoryProps = {
     website: "aribs.net",
     email: "sales@aribs.net",
   },
-  music: { enabled: true, file: "music.mp3", volume: 0.35 },
+  music: { enabled: true, volume: 0.3 },
+  sfx: { enabled: true, volume: 1 },
+  captions: true,
   voiceover: true,
 };

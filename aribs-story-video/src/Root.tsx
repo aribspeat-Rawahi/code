@@ -25,7 +25,7 @@ const calculateMetadata: CalculateMetadataFunction<StoryProps> = async ({ props 
       return getAudioDurationInSeconds(staticFile(file));
     }),
   );
-  const musicAvailable = props.music.enabled ? await exists(props.music.file) : false;
+  const musicAvailable = props.music.enabled ? await exists("music/tender.mp3") : false;
   const resolved = { ...props, voDurations, musicAvailable };
   return { durationInFrames: getTimeline(resolved).total, props: resolved };
 };

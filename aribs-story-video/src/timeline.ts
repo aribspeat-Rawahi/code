@@ -18,5 +18,12 @@ export const getTimeline = (props: StoryProps) => {
   });
   const intro = INTRO + TRANSITION;
   const total = intro + scenes.reduce((a, b) => a + b, 0) + OUTRO - TRANSITION * (scenes.length + 1);
-  return { intro, scenes, outro: OUTRO, total };
+  // Absolute frame where each scene (and the outro) starts entering
+  const starts: number[] = [];
+  let at = intro - TRANSITION;
+  for (const len of scenes) {
+    starts.push(at);
+    at += len - TRANSITION;
+  }
+  return { intro, scenes, outro: OUTRO, total, starts, outroStart: at };
 };
