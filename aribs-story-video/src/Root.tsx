@@ -3,7 +3,8 @@ import { CalculateMetadataFunction, Composition, staticFile } from "remotion";
 import { getAudioDurationInSeconds } from "@remotion/media-utils";
 import { pad2 } from "./anim";
 import "./fonts";
-import { SCENE1_REMAKE_FRAMES, Scene1Remake } from "./remake/Scene1Remake";
+import { REMAKE_SCENES, remakeFrames } from "./remake/config";
+import { RemakeScene } from "./remake/RemakeScene";
 import { Story } from "./Story";
 import { StoryProps, defaultStory, storySchema } from "./story";
 import { FPS, getTimeline } from "./timeline";
@@ -46,9 +47,13 @@ export const RemotionRoot: React.FC = () => {
       <Composition id="StoryLandscape" width={1920} height={1080} {...shared} />
       {/* Instagram Reels, TikTok, WhatsApp Status */}
       <Composition id="StoryVertical" width={1080} height={1920} {...shared} />
-      {/* 3D-style remake test: scene 1 only */}
-      <Composition id="Remake3DScene1" component={Scene1Remake} width={1080} height={1920} fps={FPS} durationInFrames={SCENE1_REMAKE_FRAMES} />
-      <Composition id="Remake3DScene1Landscape" component={Scene1Remake} width={1920} height={1080} fps={FPS} durationInFrames={SCENE1_REMAKE_FRAMES} />
+      {/* 3D-style remake, one composition per finished scene in each layout */}
+      {REMAKE_SCENES.map((c) => (
+        <React.Fragment key={c.index}>
+          <Composition id={`Remake3DScene${c.index + 1}`} component={RemakeScene} defaultProps={{ c }} width={1080} height={1920} fps={FPS} durationInFrames={remakeFrames(c)} />
+          <Composition id={`Remake3DScene${c.index + 1}Landscape`} component={RemakeScene} defaultProps={{ c }} width={1920} height={1080} fps={FPS} durationInFrames={remakeFrames(c)} />
+        </React.Fragment>
+      ))}
     </>
   );
 };
