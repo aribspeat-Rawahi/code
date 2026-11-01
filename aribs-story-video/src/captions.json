@@ -2,51 +2,45 @@
   [
     {
       "speaker": "",
-      "text": "Meet Abu Salim. His date palms have stood on this farm for forty years.",
+      "text": "What happens to a date palm when it stops giving fruit?",
       "start": 0.0,
-      "end": 4.181
-    },
-    {
-      "speaker": "Abu Salim",
-      "text": "Another season... and still no dates.",
-      "start": 4.531,
-      "end": 7.027
-    }
-  ],
-  [
-    {
-      "speaker": "Abu Salim",
-      "text": "I cut them down. But now what? I can't sell them, and I can't just burn them.",
-      "start": 0.0,
-      "end": 5.12
+      "end": 2.773
     },
     {
       "speaker": "",
-      "text": "Heavy trunks, and nowhere to go.",
-      "start": 5.47,
-      "end": 7.347
+      "text": "For Abu Salim, it was the start of a very hard season.",
+      "start": 3.173,
+      "end": 6.544
     }
   ],
   [
     {
-      "speaker": "ARIBS driver",
-      "text": "Assalamu Alaikum, Abu Salim! Leave those trunks to us.",
+      "speaker": "",
+      "text": "He had to cut his old palms down. But the heavy trunks just lay there.",
       "start": 0.0,
       "end": 3.947
     },
     {
       "speaker": "",
-      "text": "ARIBS collects them, right from his farm.",
-      "start": 4.297,
-      "end": 6.643
+      "text": "Burning them meant smoke. Leaving them meant waste.",
+      "start": 4.347,
+      "end": 7.184
     }
   ],
   [
     {
       "speaker": "",
-      "text": "At our factory in Barka, palm trunks go in... and natural palm peat comes out.",
+      "text": "Then ARIBS came to his farm, collected every trunk, and lifted the burden off his shoulders.",
       "start": 0.0,
-      "end": 4.672
+      "end": 5.376
+    }
+  ],
+  [
+    {
+      "speaker": "",
+      "text": "At our factory in Barka, those old palm trunks become natural palm peat.",
+      "start": 0.0,
+      "end": 4.48
     }
   ],
   [
@@ -54,21 +48,15 @@
       "speaker": "",
       "text": "Packed in sealed two-hundred-litre bags, or supplied loose, by the kilo or the ton.",
       "start": 0.0,
-      "end": 4.992
+      "end": 5.035
     }
   ],
   [
     {
-      "speaker": "ARIBS driver",
-      "text": "Abu Salim! Remember your old palms? They're back!",
+      "speaker": "",
+      "text": "And it comes back home, to farms across Oman, even to Abu Salim's.",
       "start": 0.0,
-      "end": 3.328
-    },
-    {
-      "speaker": "Abu Salim",
-      "text": "Welcome back, my friends!",
-      "start": 3.678,
-      "end": 5.363
+      "end": 4.416
     }
   ],
   [
@@ -76,29 +64,29 @@
       "speaker": "",
       "text": "Mixed into the soil, palm peat holds water longer, so every drop goes further.",
       "start": 0.0,
-      "end": 4.672
+      "end": 4.864
     }
   ],
   [
     {
-      "speaker": "Abu Salim",
-      "text": "Look at this! Tomatoes, peppers... my farm is alive again.",
+      "speaker": "",
+      "text": "Today, his farm is full of life again.",
       "start": 0.0,
-      "end": 4.224
+      "end": 2.304
     }
   ],
   [
     {
-      "speaker": "Abu Salim",
-      "text": "Shukran, ARIBS!",
+      "speaker": "",
+      "text": "No burning. No waste. Just better soil, made in Oman.",
       "start": 0.0,
-      "end": 1.28
+      "end": 3.605
     },
     {
       "speaker": "",
-      "text": "From burden to better soil. ARIBS, helping make Oman greener, one palm at a time.",
-      "start": 1.63,
-      "end": 6.75
+      "text": "ARIBS. Turning old palms into a greener Oman.",
+      "start": 4.005,
+      "end": 6.885
     }
   ]
 ]
