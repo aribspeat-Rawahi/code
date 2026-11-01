@@ -43,11 +43,14 @@ const Label: React.FC<{ l: RemakeLabel; size: number; k: number }> = ({ l, size,
       <div style={{ ...base, transform: `translate(-50%, -50%) translateY(${(1 - p) * -40}px) rotate(${(1 - p) * -6}deg)`, color: "#fff" }}>
         <div
           style={{
-            background: C.forest700,
+            background: l.tone === "wood" ? "#a0703f" : C.forest700,
             borderRadius: 12 * k,
             padding: `${18 * k}px ${30 * k}px`,
             fontSize: 38 * k,
-            boxShadow: `inset 0 0 0 ${4 * k}px ${C.forest700}, inset 0 0 0 ${7 * k}px rgba(255,255,255,0.8), 0 14px 30px rgba(0,0,0,0.3)`,
+            boxShadow:
+              l.tone === "wood"
+                ? "inset 0 -6px 0 rgba(0,0,0,0.15), 0 14px 30px rgba(0,0,0,0.3)"
+                : `inset 0 0 0 ${4 * k}px ${C.forest700}, inset 0 0 0 ${7 * k}px rgba(255,255,255,0.8), 0 14px 30px rgba(0,0,0,0.3)`,
           }}
         >
           {l.text}
@@ -98,7 +101,7 @@ const Label: React.FC<{ l: RemakeLabel; size: number; k: number }> = ({ l, size,
         <div
           style={{
             position: "absolute",
-            left: 60 * k,
+            ...(l.tail === "right" ? { right: 60 * k } : { left: 60 * k }),
             top: "100%",
             width: 0,
             height: 0,
@@ -207,6 +210,104 @@ const Particles: React.FC<{ kind: RemakeSceneConfig["particles"]; size: number; 
   return null;
 };
 
+// Scene-specific effects: chimney steam, gold sparkles, falling water drops, a water gauge
+const Effects: React.FC<{ c: RemakeSceneConfig; size: number; k: number }> = ({ c, size, k }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const t = frame / fps;
+  const fill = 0.12 + 0.76 * ease(frame, fps, 1.4, 3);
+  return (
+    <>
+      {c.steam
+        ? [0, 1, 2, 3].map((i) => {
+            const q = cycle(t, 3, i * 0.75 - 3);
+            if (q < 0) return null;
+            const e = 1 - (1 - q) * (1 - q);
+            const r = size * (0.025 + 0.05 * e);
+            return (
+              <div
+                key={`steam-${i}`}
+                style={{
+                  position: "absolute",
+                  left: size * (c.steam!.x + 0.03 * e) - r,
+                  top: size * (c.steam!.y - 0.14 * e) - r,
+                  width: r * 2,
+                  height: r * 2,
+                  borderRadius: "50%",
+                  background: "radial-gradient(circle, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0) 70%)",
+                  opacity: 1 - q,
+                }}
+              />
+            );
+          })
+        : null}
+      {c.sparkles
+        ? Array.from({ length: 6 }, (_, i) => {
+            const q = cycle(t, 1.4, 0.4 + i * 0.37, 0.5);
+            if (q < 0) return null;
+            const sx = c.sparkles!.x + c.sparkles!.w * (((i * 37) % 100) / 100);
+            const sy = c.sparkles!.y + c.sparkles!.h * (((i * 61) % 100) / 100);
+            const sc = Math.sin(q * Math.PI);
+            const d = 26 * Math.max(k, 0.8);
+            return (
+              <svg
+                key={`spark-${i}`}
+                viewBox="-10 -10 20 20"
+                width={d}
+                height={d}
+                style={{ position: "absolute", left: sx * size - d / 2, top: sy * size - d / 2, transform: `scale(${sc}) rotate(${q * 90}deg)`, overflow: "visible" }}
+              >
+                <path d="M0 -9 L2.5 -2.5 L9 0 L2.5 2.5 L0 9 L-2.5 2.5 L-9 0 L-2.5 -2.5 Z" fill="#ffd866" style={{ filter: "drop-shadow(0 0 4px #ffe9a8)" }} />
+              </svg>
+            );
+          })
+        : null}
+      {c.drops
+        ? Array.from({ length: 4 }, (_, i) => {
+            const q = cycle(t, 1.1, 1.0 + i * 0.7, 0.3);
+            if (q < 0) return null;
+            const w = 16 * Math.max(k, 0.8);
+            return (
+              <div
+                key={`drop-${i}`}
+                style={{
+                  position: "absolute",
+                  left: size * (c.drops!.x + 0.04 * Math.sin(i * 2.1)) - w / 2,
+                  top: size * (c.drops!.y + (c.drops!.to - c.drops!.y) * q * q),
+                  width: w,
+                  height: w * 1.4,
+                  borderRadius: "50% 50% 50% 50% / 60% 60% 40% 40%",
+                  background: "linear-gradient(160deg, #d8f1ff 0%, #6fc0ef 70%)",
+                  boxShadow: "0 0 8px rgba(111,192,239,0.7)",
+                  opacity: Math.min(1, Math.sin(q * Math.PI) * 1.6),
+                }}
+              />
+            );
+          })
+        : null}
+      {c.gauge ? (
+        <div
+          style={{
+            position: "absolute",
+            left: size * c.gauge.x,
+            top: size * c.gauge.y,
+            transform: `translate(-50%, 0) scale(${pop(frame, fps, 1.0, 16)})`,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 10 * k,
+          }}
+        >
+          <div style={{ width: 54 * k, height: 260 * k, borderRadius: 30 * k, background: "rgba(255,255,255,0.92)", border: `${4 * k}px solid ${C.forest700}`, padding: 6 * k, display: "flex", alignItems: "flex-end", boxShadow: "0 12px 30px rgba(0,0,0,0.25)" }}>
+            <div style={{ width: "100%", height: `${fill * 100}%`, borderRadius: 22 * k, background: "linear-gradient(to top, #3a9ad9, #8fd3fa)" }} />
+          </div>
+          <div style={{ fontFamily: INTER, fontWeight: 600, fontSize: 34 * k, color: "#fff", textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}>{Math.round(fill * 100)}%</div>
+        </div>
+      ) : null}
+    </>
+  );
+};
+
 const SceneContent: React.FC<{ c: RemakeSceneConfig }> = ({ c }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -257,6 +358,7 @@ const SceneContent: React.FC<{ c: RemakeSceneConfig }> = ({ c }) => {
         <Img src={staticFile(`remake/${c.image}`)} style={{ width: "100%", height: "100%" }} />
         {/* Labels and particles live in image space so they move with the camera */}
         <Particles kind={c.particles} size={L.img} from={c.vanDust} />
+        <Effects c={c} size={L.img} k={L.label} />
         {c.labels.map((l) => (
           <Label key={l.text} l={l} size={L.img} k={L.label} />
         ))}
@@ -350,6 +452,9 @@ export const RemakeScene: React.FC<{ c: RemakeSceneConfig }> = ({ c }) => {
       {(c.sfx ?? []).map((x) => (
         <Sfx key={`${x.name}-${x.at}`} name={x.name} at={x.at * fps} volume={x.volume} />
       ))}
+      {c.drops
+        ? [0, 1, 2, 3].map((i) => <Sfx key={`drop-${i}`} name="drop" at={(1.0 + i * 0.7 + 1.1) * fps} volume={0.25} />)
+        : null}
       {(c.thuds ?? []).map((s) => (
         <Sfx key={s} name="thud" at={s * fps} volume={0.45} />
       ))}
