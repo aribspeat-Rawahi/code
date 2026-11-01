@@ -48,6 +48,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition id="StoryVertical" width={1080} height={1920} {...shared} />
       {/* 3D-style remake test: scene 1 only */}
       <Composition id="Remake3DScene1" component={Scene1Remake} width={1080} height={1920} fps={FPS} durationInFrames={SCENE1_REMAKE_FRAMES} />
+      <Composition id="Remake3DScene1Landscape" component={Scene1Remake} width={1920} height={1080} fps={FPS} durationInFrames={SCENE1_REMAKE_FRAMES} />
     </>
   );
 };
