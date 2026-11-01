@@ -37,6 +37,24 @@ const Label: React.FC<{ l: RemakeLabel; size: number; k: number }> = ({ l, size,
     color: C.forest900,
     whiteSpace: "nowrap",
   };
+  if (l.kind === "sign") {
+    // Green road sign with a thin white inner border
+    return (
+      <div style={{ ...base, transform: `translate(-50%, -50%) translateY(${(1 - p) * -40}px) rotate(${(1 - p) * -6}deg)`, color: "#fff" }}>
+        <div
+          style={{
+            background: C.forest700,
+            borderRadius: 12 * k,
+            padding: `${18 * k}px ${30 * k}px`,
+            fontSize: 38 * k,
+            boxShadow: `inset 0 0 0 ${4 * k}px ${C.forest700}, inset 0 0 0 ${7 * k}px rgba(255,255,255,0.8), 0 14px 30px rgba(0,0,0,0.3)`,
+          }}
+        >
+          {l.text}
+        </div>
+      </div>
+    );
+  }
   if (l.kind === "tag") {
     return (
       <div
@@ -94,7 +112,7 @@ const Label: React.FC<{ l: RemakeLabel; size: number; k: number }> = ({ l, size,
   );
 };
 
-const Particles: React.FC<{ kind: RemakeSceneConfig["particles"]; size: number }> = ({ kind, size }) => {
+const Particles: React.FC<{ kind: RemakeSceneConfig["particles"]; size: number; from?: { x: number; y: number } }> = ({ kind, size, from }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = frame / fps;
@@ -121,6 +139,34 @@ const Particles: React.FC<{ kind: RemakeSceneConfig["particles"]; size: number }
                 background: i % 2 ? "#b8955a" : "#9c7a45",
                 opacity: Math.sin(q * Math.PI) * 0.9,
                 transform: `rotate(${q * 540 + i * 40}deg)`,
+              }}
+            />
+          );
+        })}
+      </>
+    );
+  }
+  if (kind === "vanDust" && from) {
+    // Dust puffs rolling back from the rear wheel
+    return (
+      <>
+        {Array.from({ length: 7 }, (_, i) => {
+          const q = cycle(t, 1.6, i * 0.23 - 1.6);
+          if (q < 0) return null;
+          const e = 1 - (1 - q) * (1 - q);
+          const r = size * (0.03 + 0.09 * e);
+          return (
+            <div
+              key={i}
+              style={{
+                position: "absolute",
+                left: size * (from.x - 0.16 * e) - r,
+                top: size * (from.y - 0.05 * e) - r,
+                width: r * 2,
+                height: r * 2,
+                borderRadius: "50%",
+                background: "radial-gradient(circle, rgba(222,196,150,0.75) 0%, rgba(222,196,150,0) 70%)",
+                opacity: 1 - q,
               }}
             />
           );
@@ -204,11 +250,13 @@ const SceneContent: React.FC<{ c: RemakeSceneConfig }> = ({ c }) => {
           height: L.img,
           transform: `translate(${drift}px, ${shake}px) scale(${zoom})`,
           transformOrigin: c.camera.origin,
+          // Keep particles (e.g. van dust) inside the picture
+          overflow: "hidden",
         }}
       >
         <Img src={staticFile(`remake/${c.image}`)} style={{ width: "100%", height: "100%" }} />
         {/* Labels and particles live in image space so they move with the camera */}
-        <Particles kind={c.particles} size={L.img} />
+        <Particles kind={c.particles} size={L.img} from={c.vanDust} />
         {c.labels.map((l) => (
           <Label key={l.text} l={l} size={L.img} k={L.label} />
         ))}
@@ -298,6 +346,9 @@ export const RemakeScene: React.FC<{ c: RemakeSceneConfig }> = ({ c }) => {
       <Sfx name="whoosh" at={c.hook === "phone" ? 14 : 0} volume={0.35} />
       {c.labels.map((l) => (
         <Sfx key={l.text} name="pop" at={l.delay * fps + 2} volume={0.25} />
+      ))}
+      {(c.sfx ?? []).map((x) => (
+        <Sfx key={`${x.name}-${x.at}`} name={x.name} at={x.at * fps} volume={x.volume} />
       ))}
       {(c.thuds ?? []).map((s) => (
         <Sfx key={s} name="thud" at={s * fps} volume={0.45} />
