@@ -41,7 +41,7 @@ def main() -> None:
         pos = 0
         for speaker, text in lines:
             v = cfg["voices"][speaker]
-            samples, rate = kokoro.create(text, voice=v["voice"], speed=v["speed"], lang="en-us")
+            samples, rate = kokoro.create(text, voice=v["voice"], speed=v["speed"], lang=v.get("lang", "en-us"))  # en-gb for British voices
             cues.append({"speaker": v.get("label", ""), "text": text, "start": round(pos / rate, 3), "end": round((pos + len(samples)) / rate, 3)})
             pos += len(samples) + int(cfg["pause"] * rate)
             parts.append(samples)

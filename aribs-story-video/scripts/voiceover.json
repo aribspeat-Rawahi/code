@@ -1,38 +1,79 @@
 {
   "voices": {
-    "narrator": { "voice": "af_heart", "speed": 0.95, "label": "" }
+    "narrator": {
+      "voice": "bf_emma",
+      "lang": "en-gb",
+      "speed": 0.95,
+      "label": ""
+    }
   },
   "pause": 0.4,
   "scenes": [
     [
-      ["narrator", "What happens to a date palm when it stops giving fruit?"],
-      ["narrator", "For Abu Salim, it was the start of a very hard season."]
+      [
+        "narrator",
+        "What happens to a date palm when it stops giving fruit?"
+      ],
+      [
+        "narrator",
+        "For Abu Salim, it was the start of a very hard season."
+      ]
     ],
     [
-      ["narrator", "He had to cut his old palms down. But the heavy trunks just lay there."],
-      ["narrator", "Burning them meant smoke. Leaving them meant waste."]
+      [
+        "narrator",
+        "He had to cut his old palms down. But the heavy trunks just lay there."
+      ],
+      [
+        "narrator",
+        "Burning them meant smoke. Leaving them meant waste."
+      ]
     ],
     [
-      ["narrator", "Then ARIBS came to his farm, collected every trunk, and lifted the burden off his shoulders."]
+      [
+        "narrator",
+        "Then ARIBS came to his farm, collected every trunk, and lifted the burden off his shoulders."
+      ]
     ],
     [
-      ["narrator", "At our factory in Barka, those old palm trunks become natural palm peat."]
+      [
+        "narrator",
+        "At our factory in Barka, those old palm trunks become natural palm peat."
+      ]
     ],
     [
-      ["narrator", "Packed in sealed two-hundred-litre bags, or supplied loose, by the kilo or the ton."]
+      [
+        "narrator",
+        "Packed in sealed two-hundred-litre bags, or supplied loose, by the kilo or the ton."
+      ]
     ],
     [
-      ["narrator", "And it comes back home, to farms across Oman, even to Abu Salim's."]
+      [
+        "narrator",
+        "And it comes back home, to farms across Oman, even to Abu Salim's."
+      ]
     ],
     [
-      ["narrator", "Mixed into the soil, palm peat holds water longer, so every drop goes further."]
+      [
+        "narrator",
+        "Mixed into the soil, palm peat holds water longer, so every drop goes further."
+      ]
     ],
     [
-      ["narrator", "Today, his farm is full of life again."]
+      [
+        "narrator",
+        "Today, his farm is full of life again."
+      ]
     ],
     [
-      ["narrator", "No burning. No waste. Just better soil, made in Oman."],
-      ["narrator", "ARIBS. Turning old palms into a greener Oman."]
+      [
+        "narrator",
+        "No burning. No waste. Just better soil, made in Oman."
+      ],
+      [
+        "narrator",
+        "ARIBS. Turning old palms into a greener Oman."
+      ]
     ]
   ]
 }
