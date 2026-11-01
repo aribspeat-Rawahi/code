@@ -4,6 +4,7 @@ import { getAudioDurationInSeconds } from "@remotion/media-utils";
 import { pad2 } from "./anim";
 import "./fonts";
 import { REMAKE_SCENES, remakeFrames } from "./remake/config";
+import { RemakeFilm, filmTimeline } from "./remake/RemakeFilm";
 import { RemakeScene } from "./remake/RemakeScene";
 import { Story } from "./Story";
 import { StoryProps, defaultStory, storySchema } from "./story";
@@ -47,6 +48,9 @@ export const RemotionRoot: React.FC = () => {
       <Composition id="StoryLandscape" width={1920} height={1080} {...shared} />
       {/* Instagram Reels, TikTok, WhatsApp Status */}
       <Composition id="StoryVertical" width={1080} height={1920} {...shared} />
+      {/* 3D-style film: intro, nine scenes, outro */}
+      <Composition id="RemakeFilm" component={RemakeFilm} width={1080} height={1920} fps={FPS} durationInFrames={filmTimeline().total} />
+      <Composition id="RemakeFilmLandscape" component={RemakeFilm} width={1920} height={1080} fps={FPS} durationInFrames={filmTimeline().total} />
       {/* 3D-style remake, one composition per finished scene in each layout */}
       {REMAKE_SCENES.map((c) => (
         <React.Fragment key={c.index}>

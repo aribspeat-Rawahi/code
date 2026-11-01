@@ -11,7 +11,7 @@ export type RemakeLabel = {
   delay: number;
   dot?: string; // tag dot colour
   tail?: "left" | "right"; // speech tail side (towards the speaker)
-  tone?: "road" | "wood"; // sign style
+  tone?: "road" | "wood" | "banner"; // sign style
 };
 
 export type RemakeSceneConfig = {
@@ -162,6 +162,24 @@ export const REMAKE_SCENES: RemakeSceneConfig[] = [
     particles: "dust",
     sparkles: { x: 0.36, y: 0.42, w: 0.3, h: 0.14 },
     sfx: [{ name: "birds", at: 1.0, volume: 0.2 }],
+    music: "uplift",
+  },
+  {
+    index: 8,
+    image: "scene9.jpg",
+    hook: "reveal",
+    frame: { verticalLeft: -260 },
+    camera: { origin: "50% 45%", zoom: 1.1, drift: 0 },
+    labels: [
+      { kind: "sign", text: L(8).sign ?? "", x: 0.5, y: 0.12, delay: 0.9, tone: "banner" },
+      { kind: "speech", text: L(8).bubble ?? "", x: 0.33, y: 0.29, delay: 1.6, tail: "right" },
+    ],
+    particles: "dust",
+    sparkles: { x: 0.25, y: 0.48, w: 0.5, h: 0.12 },
+    sfx: [
+      { name: "chime", at: 0.8, volume: 0.25 },
+      { name: "birds", at: 1.8, volume: 0.2 },
+    ],
     music: "uplift",
   },
 ];

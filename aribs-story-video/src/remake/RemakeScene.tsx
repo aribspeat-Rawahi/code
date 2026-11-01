@@ -43,7 +43,8 @@ const Label: React.FC<{ l: RemakeLabel; size: number; k: number }> = ({ l, size,
       <div style={{ ...base, transform: `translate(-50%, -50%) translateY(${(1 - p) * -40}px) rotate(${(1 - p) * -6}deg)`, color: "#fff" }}>
         <div
           style={{
-            background: l.tone === "wood" ? "#a0703f" : C.forest700,
+            background: l.tone === "wood" ? "#a0703f" : l.tone === "banner" ? C.leaf : C.forest700,
+            color: l.tone === "banner" ? C.forest900 : "#fff",
             borderRadius: 12 * k,
             padding: `${18 * k}px ${30 * k}px`,
             fontSize: 38 * k,
@@ -410,7 +411,9 @@ const Sfx: React.FC<{ name: string; at: number; volume: number }> = ({ name, at,
   </Sequence>
 );
 
-export const RemakeScene: React.FC<{ c: RemakeSceneConfig }> = ({ c }) => {
+// standalone = render one scene on its own (own entrance and music).
+// In the full film the transitions and one continuous music track are handled by RemakeFilm.
+export const RemakeScene: React.FC<{ c: RemakeSceneConfig; standalone?: boolean }> = ({ c, standalone = true }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const total = remakeFrames(c);
@@ -427,6 +430,8 @@ export const RemakeScene: React.FC<{ c: RemakeSceneConfig }> = ({ c }) => {
       overflow: "hidden",
       boxShadow: `0 0 0 ${bezel}px #101512, 0 40px 90px rgba(0,0,0,${0.45 * (1 - grow)})`,
     };
+  } else if (!standalone) {
+    wrapper = {};
   } else {
     // Circle opening from the centre
     const r = interpolate(frame, [0, 20], [0, 75], { ...CLAMP, easing: (v) => 1 - (1 - v) ** 3 });
@@ -441,10 +446,12 @@ export const RemakeScene: React.FC<{ c: RemakeSceneConfig }> = ({ c }) => {
       <Sequence from={VO_AT} layout="none">
         <Audio src={staticFile(`vo/${pad2(c.index + 1)}.mp3`)} />
       </Sequence>
-      <Audio
-        src={staticFile(`music/${c.music}.mp3`)}
-        volume={(f) => interpolate(f, [0, 20, VO_AT, VO_AT + 10, total - 30, total], [0, 0.3, 0.3, 0.12, 0.12, 0], CLAMP)}
-      />
+      {standalone ? (
+        <Audio
+          src={staticFile(`music/${c.music}.mp3`)}
+          volume={(f) => interpolate(f, [0, 20, VO_AT, VO_AT + 10, total - 30, total], [0, 0.3, 0.3, 0.12, 0.12, 0], CLAMP)}
+        />
+      ) : null}
       <Sfx name="whoosh" at={c.hook === "phone" ? 14 : 0} volume={0.35} />
       {c.labels.map((l) => (
         <Sfx key={l.text} name="pop" at={l.delay * fps + 2} volume={0.25} />
