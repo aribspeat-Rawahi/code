@@ -51,6 +51,9 @@ export const RemotionRoot: React.FC = () => {
       {/* 3D-style film: intro, nine scenes, outro */}
       <Composition id="RemakeFilm" component={RemakeFilm} width={1080} height={1920} fps={FPS} durationInFrames={filmTimeline().total} />
       <Composition id="RemakeFilmLandscape" component={RemakeFilm} width={1920} height={1080} fps={FPS} durationInFrames={filmTimeline().total} />
+      {/* Arabic version: male narrator (vidIQ / ElevenLabs "Brian"), Arabic text */}
+      <Composition id="RemakeFilmAr" component={RemakeFilm} defaultProps={{ lang: "ar" as const }} width={1080} height={1920} fps={FPS} durationInFrames={filmTimeline("ar").total} />
+      <Composition id="RemakeFilmArLandscape" component={RemakeFilm} defaultProps={{ lang: "ar" as const }} width={1920} height={1080} fps={FPS} durationInFrames={filmTimeline("ar").total} />
       {/* 3D-style remake, one composition per finished scene in each layout */}
       {REMAKE_SCENES.map((c) => (
         <React.Fragment key={c.index}>

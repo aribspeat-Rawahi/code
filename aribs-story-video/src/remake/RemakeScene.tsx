@@ -1,13 +1,11 @@
 import React from "react";
 import { AbsoluteFill, Audio, Img, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { CLAMP, cycle, ease, pad2, pop, pulse } from "../anim";
-import { Caption } from "../components/Caption";
 import { Words } from "../components/Words";
-import { FRAUNCES, INTER } from "../fonts";
-import { defaultStory } from "../story";
+import { INTER } from "../fonts";
 import { C } from "../theme";
-import { VO_START } from "../timeline";
 import { RemakeLabel, RemakeSceneConfig, VO_AT, remakeFrames } from "./config";
+import { Cue, LANG, Lang } from "./lang";
 
 // 3D-style remake: one AI-rendered still per scene, brought to life with a camera push,
 // particles, pop-up labels, camera shakes, voiceover, music and captions.
@@ -21,7 +19,7 @@ const useFrameLayout = (c: RemakeSceneConfig) => {
     : { vertical, img: 1180, left: 740, top: -50, label: 0.8 }; // still on the right (slightly cropped top/bottom), text panel on the left
 };
 
-const Label: React.FC<{ l: RemakeLabel; size: number; k: number }> = ({ l, size, k }) => {
+const Label: React.FC<{ l: RemakeLabel; size: number; k: number; font: string; dir: "ltr" | "rtl" }> = ({ l, size, k, font, dir }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const p = pop(frame, fps, l.delay, l.kind === "tag" ? 15 : 14);
@@ -32,7 +30,8 @@ const Label: React.FC<{ l: RemakeLabel; size: number; k: number }> = ({ l, size,
     top: l.y * size,
     transform: `translate(-50%, -50%) translateY(${bob}px) scale(${p})`,
     opacity: Math.min(1, p * 2),
-    fontFamily: INTER,
+    fontFamily: font,
+    direction: dir,
     fontWeight: 600,
     color: C.forest900,
     whiteSpace: "nowrap",
@@ -309,13 +308,43 @@ const Effects: React.FC<{ c: RemakeSceneConfig; size: number; k: number }> = ({ 
   );
 };
 
-const SceneContent: React.FC<{ c: RemakeSceneConfig }> = ({ c }) => {
+// Caption of the line being spoken; frame 0 = start of the voiceover
+const LangCaption: React.FC<{ cues: Cue[]; fontSize: number; font: string; dir: "ltr" | "rtl" }> = ({ cues, fontSize, font, dir }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const t = frame / fps;
+  const cue = cues.find((q) => t >= q.start - 0.1 && t <= q.end + 0.25);
+  if (!cue) return null;
+  const opacity = interpolate(t, [cue.start - 0.1, cue.start + 0.05, cue.end + 0.1, cue.end + 0.25], [0, 1, 1, 0], CLAMP);
+  return (
+    <div
+      style={{
+        opacity,
+        direction: dir,
+        background: "rgba(20,51,29,0.9)",
+        color: "#fff",
+        borderRadius: 18,
+        padding: `${fontSize * 0.4}px ${fontSize * 0.65}px`,
+        fontFamily: font,
+        fontSize,
+        lineHeight: dir === "rtl" ? 1.6 : 1.35,
+        fontWeight: 600,
+      }}
+    >
+      {cue.text}
+    </div>
+  );
+};
+
+const SceneContent: React.FC<{ c: RemakeSceneConfig; lang: Lang }> = ({ c, lang }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const L = useFrameLayout(c);
-  const total = remakeFrames(c);
+  const total = remakeFrames(c, lang);
   const t = frame / fps;
-  const step = defaultStory.steps[c.index];
+  const T = LANG[lang];
+  const rtl = T.dir === "rtl";
+  const labels = c.labels.map((l, j) => ({ ...l, text: T.labels[c.index]?.[j] ?? l.text }));
 
   // Slow camera push, a little drift, and a short shake on every thud
   const zoom = interpolate(frame, [0, total], [1, L.vertical ? c.camera.zoom : c.camera.zoom - 0.02], CLAMP);
@@ -326,11 +355,15 @@ const SceneContent: React.FC<{ c: RemakeSceneConfig }> = ({ c }) => {
     if (d >= 0 && d < 0.5) shake += 12 * Math.exp(-d * 9) * Math.sin(d * 55);
   }
   const title = (
-    <Words text={step.title} start={Math.round(1.7 * fps)} style={{ fontFamily: FRAUNCES, fontWeight: 600, fontSize: L.vertical ? 84 : 92, lineHeight: 1.05, color: "#fff" }} />
+    <Words
+      text={T.titles[c.index]}
+      start={Math.round(1.7 * fps)}
+      style={{ fontFamily: T.titleFont, fontWeight: rtl ? 700 : 600, fontSize: L.vertical ? 84 : 92, lineHeight: rtl ? 1.3 : 1.05, color: "#fff", direction: T.dir }}
+    />
   );
   const caption = (
-    <Sequence from={VO_AT - VO_START} layout="none">
-      <Caption index={c.index} fontSize={34} />
+    <Sequence from={VO_AT} layout="none">
+      <LangCaption cues={T.captions[c.index] ?? []} fontSize={rtl ? 36 : 34} font={T.bodyFont} dir={T.dir} />
     </Sequence>
   );
 
@@ -353,8 +386,8 @@ const SceneContent: React.FC<{ c: RemakeSceneConfig }> = ({ c }) => {
         {/* Labels and particles live in image space so they move with the camera */}
         <Particles kind={c.particles} size={L.img} from={c.vanDust} />
         <Effects c={c} size={L.img} k={L.label} />
-        {c.labels.map((l) => (
-          <Label key={l.text} l={l} size={L.img} k={L.label} />
+        {labels.map((l, j) => (
+          <Label key={j} l={l} size={L.img} k={L.label} font={T.bodyFont} dir={T.dir} />
         ))}
       </div>
       {L.vertical ? (
@@ -370,8 +403,8 @@ const SceneContent: React.FC<{ c: RemakeSceneConfig }> = ({ c }) => {
               background: `linear-gradient(to bottom, rgba(20,51,29,0) 0%, rgba(20,51,29,0.92) 38%, ${C.forest900} 60%)`,
             }}
           />
-          <div style={{ position: "absolute", left: 80, right: 80, top: 1410 }}>{title}</div>
-          <div style={{ position: "absolute", left: 80, right: 80, top: 1530, fontFamily: INTER }}>{caption}</div>
+          <div style={{ position: "absolute", left: 80, right: 80, top: 1410, textAlign: rtl ? "right" : "left" }}>{title}</div>
+          <div style={{ position: "absolute", left: 80, right: 80, top: rtl ? 1545 : 1530 }}>{caption}</div>
         </>
       ) : (
         <>
@@ -386,7 +419,20 @@ const SceneContent: React.FC<{ c: RemakeSceneConfig }> = ({ c }) => {
               background: `linear-gradient(to right, ${C.forest900} 0%, ${C.forest900} 30%, rgba(20,51,29,0.7) 55%, rgba(20,51,29,0) 100%)`,
             }}
           />
-          <div style={{ position: "absolute", left: 110, top: 0, width: 590, height: 1080, display: "flex", flexDirection: "column", justifyContent: "center", gap: 28, fontFamily: INTER }}>
+          <div
+            style={{
+              position: "absolute",
+              left: 110,
+              top: 0,
+              width: 590,
+              height: 1080,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              gap: 28,
+              textAlign: rtl ? "right" : "left",
+            }}
+          >
             {title}
             <div style={{ height: 190 }}>{caption}</div>
           </div>
@@ -404,10 +450,10 @@ const Sfx: React.FC<{ name: string; at: number; volume: number }> = ({ name, at,
 
 // standalone = render one scene on its own (own entrance and music).
 // In the full film the transitions and one continuous music track are handled by RemakeFilm.
-export const RemakeScene: React.FC<{ c: RemakeSceneConfig; standalone?: boolean }> = ({ c, standalone = true }) => {
+export const RemakeScene: React.FC<{ c: RemakeSceneConfig; standalone?: boolean; lang?: Lang }> = ({ c, standalone = true, lang = "en" }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const total = remakeFrames(c);
+  const total = remakeFrames(c, lang);
 
   let wrapper: React.CSSProperties;
   if (c.hook === "phone") {
@@ -432,10 +478,10 @@ export const RemakeScene: React.FC<{ c: RemakeSceneConfig; standalone?: boolean 
   return (
     <AbsoluteFill style={{ background: `radial-gradient(circle at 50% 45%, ${C.forest600} 0%, ${C.forest900} 70%)` }}>
       <AbsoluteFill style={wrapper}>
-        <SceneContent c={c} />
+        <SceneContent c={c} lang={lang} />
       </AbsoluteFill>
       <Sequence from={VO_AT} layout="none">
-        <Audio src={staticFile(`vo/${pad2(c.index + 1)}.mp3`)} />
+        <Audio src={staticFile(`${LANG[lang].voDir}/${pad2(c.index + 1)}.mp3`)} />
       </Sequence>
       {standalone ? (
         <Audio
@@ -444,8 +490,8 @@ export const RemakeScene: React.FC<{ c: RemakeSceneConfig; standalone?: boolean 
         />
       ) : null}
       <Sfx name="whoosh" at={c.hook === "phone" ? 14 : 0} volume={0.35} />
-      {c.labels.map((l) => (
-        <Sfx key={l.text} name="pop" at={l.delay * fps + 2} volume={0.25} />
+      {c.labels.map((l, j) => (
+        <Sfx key={j} name="pop" at={l.delay * fps + 2} volume={0.25} />
       ))}
       {(c.sfx ?? []).map((x) => (
         <Sfx key={`${x.name}-${x.at}`} name={x.name} at={x.at * fps} volume={x.volume} />

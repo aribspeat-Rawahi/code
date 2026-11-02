@@ -1,5 +1,5 @@
-import captions from "../captions.json";
 import { defaultStory } from "../story";
+import { Lang, voDuration } from "./lang";
 
 // One entry per scene of the 3D-style remake. Positions (x, y) are fractions of the square still.
 
@@ -36,13 +36,9 @@ export type RemakeSceneConfig = {
 export const FPS = 30;
 export const VO_AT = 42; // voiceover starts 1.4 s into the scene
 
-const voDuration = (index: number) => {
-  const cues = (captions as { end: number }[][])[index] ?? [];
-  return cues.length ? cues[cues.length - 1].end : 0;
-};
 
 /** Scene length: voiceover plus a short tail, never shorter than 9 s. */
-export const remakeFrames = (c: RemakeSceneConfig) => Math.max(9 * FPS, VO_AT + Math.ceil(voDuration(c.index) * FPS) + 24);
+export const remakeFrames = (c: RemakeSceneConfig, lang: Lang = "en") => Math.max(9 * FPS, VO_AT + Math.ceil(voDuration(lang, c.index) * FPS) + 24);
 
 const L = (i: number) => defaultStory.steps[i].labels;
 
@@ -101,7 +97,6 @@ export const REMAKE_SCENES: RemakeSceneConfig[] = [
       { kind: "tag", text: L(3).tags?.[1] ?? "", x: 0.7, y: 0.57, delay: 1.6 },
     ],
     particles: "none",
-    steam: { x: 0.545, y: 0.2 },
     sparkles: { x: 0.6, y: 0.62, w: 0.3, h: 0.2 },
     sfx: [{ name: "hum", at: 0.4, volume: 0.25 }],
     music: "hope",
