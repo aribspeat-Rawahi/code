@@ -14,6 +14,7 @@ import { LANG, Lang, voDuration } from "./lang";
 // The full 3D-style film: intro, the nine scenes, outro, with one continuous music track.
 
 const T = 18; // transition frames
+const COVER = 45; // 1.5 s thumbnail card, so feeds pick it as the preview frame
 const INTRO = 90;
 const OUTRO = 180;
 const XFADE = 45;
@@ -22,7 +23,7 @@ const SLIDE_INTO = new Set([3, 5]); // van scenes slide sideways into scene 4 an
 export const filmTimeline = (lang: Lang = "en") => {
   const lens = REMAKE_SCENES.map((c) => remakeFrames(c, lang));
   const starts: number[] = [];
-  let at = INTRO - T;
+  let at = COVER - T + INTRO - T;
   for (const len of lens) {
     starts.push(at);
     at += len - T;
@@ -30,6 +31,21 @@ export const filmTimeline = (lang: Lang = "en") => {
   return { lens, starts, outroStart: at, total: at + OUTRO };
 };
 
+
+// The campaign thumbnail (public/remake/cover-*.jpg), slowly pushing in
+const Cover: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { width, height } = useVideoConfig();
+  const zoom = interpolate(frame, [0, COVER], [1, 1.04], CLAMP);
+  return (
+    <AbsoluteFill style={{ background: C.forest900 }}>
+      <Img
+        src={staticFile(height > width ? "remake/cover-vertical.jpg" : "remake/cover-landscape.jpg")}
+        style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${zoom})` }}
+      />
+    </AbsoluteFill>
+  );
+};
 
 const Bg: React.FC = () => <AbsoluteFill style={{ background: `radial-gradient(circle at 50% 42%, ${C.forest600} 0%, ${C.forest900} 72%)` }} />;
 
@@ -151,6 +167,10 @@ export const RemakeFilm: React.FC<{ lang?: Lang }> = ({ lang = "en" }) => {
   const tl = filmTimeline(lang);
   const timing = linearTiming({ durationInFrames: T, easing: Easing.inOut(Easing.cubic) });
   const parts: React.ReactNode[] = [
+    <TransitionSeries.Sequence key="cover" durationInFrames={COVER}>
+      <Cover />
+    </TransitionSeries.Sequence>,
+    <TransitionSeries.Transition key="t-cover" timing={timing} presentation={fade()} />,
     <TransitionSeries.Sequence key="intro" durationInFrames={INTRO}>
       <Intro lang={lang} />
     </TransitionSeries.Sequence>,
