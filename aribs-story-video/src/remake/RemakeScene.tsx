@@ -325,13 +325,6 @@ const SceneContent: React.FC<{ c: RemakeSceneConfig }> = ({ c }) => {
     const d = t - at;
     if (d >= 0 && d < 0.5) shake += 12 * Math.exp(-d * 9) * Math.sin(d * 55);
   }
-  const textIn = ease(frame, fps, 1.6, 0.8);
-
-  const counter = (
-    <div style={{ fontFamily: INTER, fontWeight: 600, fontSize: 30, letterSpacing: "0.14em", color: C.leaf, opacity: textIn, transform: `translateY(${(1 - textIn) * 30}px)` }}>
-      {pad2(c.index + 1)} / {pad2(defaultStory.steps.length)}
-    </div>
-  );
   const title = (
     <Words text={step.title} start={Math.round(1.7 * fps)} style={{ fontFamily: FRAUNCES, fontWeight: 600, fontSize: L.vertical ? 84 : 92, lineHeight: 1.05, color: "#fff" }} />
   );
@@ -377,7 +370,6 @@ const SceneContent: React.FC<{ c: RemakeSceneConfig }> = ({ c }) => {
               background: `linear-gradient(to bottom, rgba(20,51,29,0) 0%, rgba(20,51,29,0.92) 38%, ${C.forest900} 60%)`,
             }}
           />
-          <div style={{ position: "absolute", left: 80, right: 80, top: 1360 }}>{counter}</div>
           <div style={{ position: "absolute", left: 80, right: 80, top: 1410 }}>{title}</div>
           <div style={{ position: "absolute", left: 80, right: 80, top: 1530, fontFamily: INTER }}>{caption}</div>
         </>
@@ -395,7 +387,6 @@ const SceneContent: React.FC<{ c: RemakeSceneConfig }> = ({ c }) => {
             }}
           />
           <div style={{ position: "absolute", left: 110, top: 0, width: 590, height: 1080, display: "flex", flexDirection: "column", justifyContent: "center", gap: 28, fontFamily: INTER }}>
-            {counter}
             {title}
             <div style={{ height: 190 }}>{caption}</div>
           </div>
