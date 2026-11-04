@@ -1,0 +1,45 @@
+{
+  "id": "example",
+  "lang": "en",
+  "brand": {
+    "logo": "example/logo.png",
+    "dark": "#14331d",
+    "mid": "#2c6b3f",
+    "accent": "#66d154",
+    "light": "#e3f6dc"
+  },
+  "intro": {
+    "title": "Your story starts here"
+  },
+  "outro": {
+    "headline": "Your brand — your tagline",
+    "subline": "One line about the product",
+    "contacts": [
+      "example.com",
+      "hello@example.com"
+    ]
+  },
+  "voice": {
+    "voice": "bf_emma",
+    "lang": "en-gb",
+    "speed": 0.95
+  },
+  "scenes": [
+    {
+      "image": "example/scene.jpg",
+      "title": "A first scene",
+      "voiceover": "Replace this storyboard with your own scenes, images and narration.",
+      "mood": "hope",
+      "labels": [
+        {
+          "kind": "speech",
+          "text": "Hello!",
+          "x": 0.5,
+          "y": 0.3,
+          "delay": 1.2
+        }
+      ],
+      "particles": "dust"
+    }
+  ]
+}
