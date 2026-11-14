@@ -27,6 +27,9 @@ def main():
     for key in ("lang", "brand", "intro", "outro", "scenes"):
         if key not in sb:
             fail(f'missing "{key}"')
+    for key, val in (("intro.title", sb["intro"].get("title", "")), ("outro.headline", sb["outro"].get("headline", ""))):
+        if not val or "TODO" in val:
+            fail(f'fill in "{key}"')
     for key in ("logo", "dark", "mid", "accent", "light"):
         if key not in sb["brand"]:
             fail(f'brand is missing "{key}"')
@@ -37,7 +40,11 @@ def main():
         for key in ("image", "title", "voiceover"):
             if not s.get(key):
                 fail(f'scene {i} is missing "{key}"')
+            if "TODO" in s[key]:
+                fail(f'scene {i}: replace the TODO in "{key}"')
         files.append(s["image"])
+        if s.get("video"):
+            files.append(s["video"])
         for l in s.get("labels", []):
             if l.get("kind") not in KINDS:
                 fail(f"scene {i}: label kind must be one of {sorted(KINDS)}")
@@ -51,6 +58,14 @@ def main():
 
     out_dir = project / "src" / "storyboards"
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Keep the voiceover of scenes whose narration did not change since the last install
+    installed = out_dir / f"{sb['id']}.json"
+    if installed.is_file():
+        old = json.loads(installed.read_text(encoding="utf-8"))["scenes"]
+        for i, s in enumerate(sb["scenes"]):
+            if not s.get("captions") and i < len(old) and old[i].get("voiceover") == s["voiceover"] and old[i].get("captions"):
+                s["captions"], s["voFile"] = old[i]["captions"], old[i].get("voFile")
+        warnings = [w for w in warnings if not any(w.startswith(f"scene {i + 1} ") for i, s in enumerate(sb["scenes"]) if s.get("captions"))]
     (out_dir / f"{sb['id']}.json").write_text(json.dumps(sb, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     write_index(out_dir)
     for w in warnings:

@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Audio, Img, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Img, Sequence, Video, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { CLAMP, cycle, ease, pop, pulse } from "./anim";
 import { alpha, useBrand } from "./brand";
 import { VO_AT, sceneFrames, textSettings } from "./story";
@@ -362,7 +362,11 @@ const SceneContent: React.FC<{ c: SceneT; sb: Storyboard }> = ({ c, sb }) => {
           overflow: "hidden",
         }}
       >
-        <Img src={staticFile(c.image)} style={{ width: "100%", height: "100%" }} />
+        {c.video ? (
+          <Video src={staticFile(c.video)} muted loop style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        ) : (
+          <Img src={staticFile(c.image)} style={{ width: "100%", height: "100%" }} />
+        )}
         {/* Labels and particles live in image space so they move with the camera */}
         <Particles kind={c.particles ?? "none"} size={L.img} from={c.vanDust} />
         <Effects c={c} size={L.img} k={L.label} numFont={T.bodyFont} />

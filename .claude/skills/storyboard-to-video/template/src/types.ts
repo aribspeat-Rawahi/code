@@ -15,7 +15,8 @@ export type Label = {
 };
 
 export type Scene = {
-  image: string; // file in public/
+  image: string; // square still in public/ (also the poster for "video")
+  video?: string; // optional MP4 clip in public/ (e.g. an AI image-to-video clip); plays muted, loops if shorter than the scene
   title: string;
   voiceover: string; // narration text (the voiceover script turns it into audio + captions)
   hook?: "phone" | "reveal"; // phone = starts inside a phone screen (good for scene 1)
