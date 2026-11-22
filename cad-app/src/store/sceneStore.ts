@@ -11,11 +11,12 @@ import {
 import { profileFromPoints, type Pt } from '../tools/sketch';
 import { matrixOf } from '../tools/geometry';
 import type { Unit } from '../units';
+import type { SnapKind } from '../tools/snap';
 import { findObject, flatten, removeIn, updateIn } from './tree';
 
 export type Vec3 = [number, number, number];
 export type TransformMode = 'translate' | 'rotate' | 'scale';
-export type Tool = 'select' | 'sketch';
+export type Tool = 'select' | 'sketch' | 'pickmove';
 
 export interface CadObject {
   id: string;
@@ -45,6 +46,12 @@ export interface SnapSettings {
   enabled: boolean;
   step: number; // mm
   angle: number; // degrees
+  object: boolean; // snap to object corners, midpoints and centres
+}
+
+export interface PickInfo {
+  point: Vec3;
+  kind: SnapKind | null; // null = grid / free point
 }
 
 interface SceneState {
@@ -59,6 +66,8 @@ interface SceneState {
   extrudeHeight: number; // mm, used when a sketch is closed
   sketchPoints: Pt[];
   cursor: Pt | null;
+  pick: PickInfo | null;
+  pickBase: Vec3 | null;
   projectName: string;
   log: string[];
   past: CadObject[][];
@@ -83,6 +92,10 @@ interface SceneState {
   cancelSketch: () => void;
   finishSketch: () => boolean;
   setCursor: (p: Pt | null) => void;
+  setPick: (p: PickInfo | null) => void;
+  startPickMove: () => boolean;
+  setPickBase: (p: Vec3) => void;
+  finishPickMove: (target: Vec3) => void;
   setProjectName: (name: string) => void;
   print: (msg: string) => void;
   loadProject: (objects: CadObject[], unit: Unit, name: string) => void;
@@ -132,10 +145,12 @@ export const useScene = create<SceneState>((set, get) => ({
   mode: 'translate',
   tool: 'select',
   unit: 'mm',
-  snap: { enabled: true, step: 10, angle: 15 },
+  snap: { enabled: true, step: 10, angle: 15, object: true },
   extrudeHeight: 100,
   sketchPoints: [],
   cursor: null,
+  pick: null,
+  pickBase: null,
   projectName: 'untitled',
   log: ['Nirman CAD ready. Type HELP for commands.'],
   past: [],
@@ -267,6 +282,8 @@ export const useScene = create<SceneState>((set, get) => ({
       tool,
       sketchPoints: [],
       cursor: null,
+      pick: null,
+      pickBase: null,
       ...(tool === 'sketch' ? sel([]) : sel(s.selection)),
     })),
 
@@ -304,6 +321,34 @@ export const useScene = create<SceneState>((set, get) => ({
   },
 
   setCursor: (p) => set({ cursor: p }),
+  setPick: (pick) => set({ pick }),
+
+  startPickMove: () => {
+    const s = get();
+    if (!s.selection.some((id) => s.objects.some((o) => o.id === id))) {
+      s.print('Error: select the object(s) to move first.');
+      return false;
+    }
+    set({ tool: 'pickmove', pickBase: null, pick: null, sketchPoints: [], cursor: null });
+    s.print('Move: click the base point (e.g. a corner of the object), then the target point. Or type x y z / @dx dy dz. Esc cancels.');
+    return true;
+  },
+
+  setPickBase: (p) => set({ pickBase: p }),
+
+  finishPickMove: (target) => {
+    const s = get();
+    const base = s.pickBase;
+    if (!base) return;
+    const d: Vec3 = [target[0] - base[0], target[1] - base[1], target[2] - base[2]];
+    const ids = new Set(s.selection.filter((id) => s.objects.some((o) => o.id === id)));
+    const objects = s.objects.map((o) =>
+      ids.has(o.id) ? { ...o, position: [o.position[0] + d[0], o.position[1] + d[1], o.position[2] + d[2]] as Vec3 } : o,
+    );
+    set({ ...withHistory(s), objects, tool: 'select', pickBase: null, pick: null });
+    const r = (v: number) => Math.round(v * 1000) / 1000;
+    s.print(`Moved ${ids.size} object(s) by ${r(d[0])}, ${r(d[1])}, ${r(d[2])} mm (distance ${r(Math.hypot(...d))} mm).`);
+  },
   setProjectName: (projectName) => set({ projectName }),
   print: (msg) => set((s) => ({ log: [...s.log, msg].slice(-LOG_LIMIT) })),
 

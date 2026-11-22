@@ -10,9 +10,11 @@ const HELP = [
   'WALL x1 y1 x2 y2 [thickness] [height]     POLY h x1 y1 x2 y2 x3 y3 ...',
   'SKETCH  then click points, or type  x y  /  @dx dy ;  Enter or CLOSE to extrude, CANCEL to stop',
   'HEIGHT h  (extrude height for sketches)',
+  'MOVE (no args) = move by points: pick base point, then target (snaps to corners/midpoints/centres)',
   'MOVE dx dy dz   MOVETO x y z   ROTATE deg [X|Y|Z]   COPY [dx dy dz]   DEL   SELECT name   LIST',
   'UNION  SUBTRACT  INTERSECT  (on the selection; first selected = base)   EXPLODE',
   'SELECT name[, name2, ...]  selects several, in order (e.g. SELECT Wall 1, Box 1)',
+  'OSNAP on|off  (object snap, F3)',
   'UNDO  REDO  UNITS mm|cm|m  SNAP on|off|step  NEW  OPEN  SAVE  EXPORT stl|obj',
 ];
 
@@ -34,8 +36,8 @@ export async function runCommand(raw: string): Promise<void> {
   print(`> ${line}`);
 
   let tokens = line.split(/[\s,]+/).filter(Boolean);
-  // While sketching, bare numbers are an absolute point: "1000 0"
-  if (st().tool === 'sketch' && /^-?[\d.]/.test(tokens[0])) tokens = ['P', ...tokens];
+  // While picking points, bare numbers are an absolute point: "1000 0"
+  if (st().tool !== 'select' && /^-?[\d.]/.test(tokens[0])) tokens = ['P', ...tokens];
   // "@dx,dy" or "@ dx dy" -> relative point
   if (tokens[0].startsWith('@')) {
     const rest = tokens[0].slice(1);
@@ -148,7 +150,23 @@ export async function runCommand(raw: string): Promise<void> {
       return print('Sketch: click points or type "x y" / "@dx dy". Enter closes, Esc cancels, Shift locks to 90°.');
     case 'P':
     case '@': {
-      if (st().tool !== 'sketch') return print('Error: start SKETCH first.');
+      if (st().tool === 'pickmove') {
+        const v = nums(2, 3, cmd === 'P' ? 'x y [z]' : '@dx dy [dz]');
+        if (!v) return;
+        const base = st().pickBase;
+        if (cmd === '@' && !base) return print('Error: set the base point first.');
+        const p: Vec3 =
+          cmd === '@'
+            ? [base![0] + L(v[0]), base![1] + L(v[1]), base![2] + L(v[2] ?? 0)]
+            : [L(v[0]), L(v[1]), L(v[2] ?? 0)];
+        if (!base) {
+          st().setPickBase(p);
+          return print('Base point set. Now the target point.');
+        }
+        st().finishPickMove(p);
+        return;
+      }
+      if (st().tool !== 'sketch') return print('Error: start SKETCH or MOVE first.');
       const v = nums(2, 2, cmd === 'P' ? 'x y' : '@dx dy');
       if (!v) return;
       const last = st().sketchPoints.at(-1);
@@ -163,7 +181,7 @@ export async function runCommand(raw: string): Promise<void> {
       return;
     case 'CANCEL':
       st().setTool('select');
-      return print('Sketch cancelled.');
+      return print('Cancelled.');
     case 'HEIGHT': {
       const v = nums(1, 1, 'HEIGHT h');
       if (!v || !positive(v, 'HEIGHT h')) return;
@@ -172,6 +190,10 @@ export async function runCommand(raw: string): Promise<void> {
     }
 
     case 'MOVE': {
+      if (!args.length) {
+        st().startPickMove();
+        return;
+      }
       const v = nums(2, 3, 'MOVE dx dy [dz]');
       const o = v && selected();
       if (!v || !o) return;
@@ -262,6 +284,12 @@ export async function runCommand(raw: string): Promise<void> {
       if (u !== 'mm' && u !== 'cm' && u !== 'm') return print('Usage: UNITS mm|cm|m');
       st().setUnit(u);
       return print(`Units: ${u}`);
+    }
+    case 'OSNAP': {
+      const a = args[0]?.toLowerCase();
+      if (a !== 'on' && a !== 'off') return print('Usage: OSNAP on|off');
+      st().setSnap({ object: a === 'on' });
+      return print(`Object snap ${a}`);
     }
     case 'SNAP': {
       const a = args[0]?.toLowerCase();

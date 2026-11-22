@@ -32,3 +32,9 @@ Select the base first, then Ctrl+click the tools, then **Union / Subtract / Inte
 Parts stay editable: click a part in the Objects tree and change its size — the result rebuilds.
 Hide a part (eye icon) to suppress that cut. `EXPLODE` splits a boolean back into its parts.
 Tip: `SELECT Wall 1, Door 1` then `SUBTRACT` cuts a door opening.
+
+## Object snap & Move by points
+- Object snap (OSnap, `F3`): green = Endpoint (corner), blue = Midpoint (edge middle), pink = Center (axis/hole centre, object centre).
+- Works in Sketch (draw along existing walls) and in **Move ⇢** (`M`, or `MOVE` with no arguments):
+  select objects → click a base point → click the target point. You can also type `x y z` or `@dx dy dz`.
+- Example: select a door box, `M`, click its bottom corner, click the wall corner — it lands exactly there.

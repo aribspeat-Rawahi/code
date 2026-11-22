@@ -17,6 +17,7 @@ function FeatureEdges({ geometry, color }: { geometry: THREE.BufferGeometry; col
   );
 }
 import { samePt, snapValue, type Pt } from '../tools/sketch';
+import { collectSnapPoints, findSnap, SNAP_COLOR } from '../tools/snap';
 import { DEG2RAD } from '../units';
 
 // Clicking a gizmo handle also fires the canvas "missed" event; ignore it briefly after a drag.
@@ -47,7 +48,7 @@ function ObjectMesh({
 }) {
   const ref = useRef<THREE.Mesh>(null!);
   const mode = useScene((s) => s.mode);
-  const sketching = useScene((s) => s.tool === 'sketch');
+  const sketching = useScene((s) => s.tool !== 'select'); // any picking tool
   const snap = useScene((s) => s.snap);
   const select = useScene((s) => s.select);
   const updateObject = useScene((s) => s.updateObject);
@@ -137,28 +138,104 @@ function Dots({ points, color, size }: { points: Pt[]; color: string; size: numb
   );
 }
 
+/** Object snap candidates for the current scene, rebuilt only when objects change. */
+function useSnapPoints(exclude?: string[]) {
+  const objects = useScene((s) => s.objects);
+  const enabled = useScene((s) => s.snap.object);
+  const key = exclude?.join(',') ?? '';
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => (enabled ? collectSnapPoints(objects, new Set(exclude)) : []), [objects, enabled, key]);
+}
+
+/** Coloured marker on the snapped point: green = endpoint, blue = midpoint, pink = centre. */
+function SnapMarker() {
+  const pick = useScene((s) => s.pick);
+  const pts = useMemo(() => (pick?.kind ? [pick.point] : []), [pick]);
+  if (!pick?.kind) return null;
+  return (
+    <>
+      <Dots3 points={pts} color="#000000" size={15} />
+      <Dots3 points={pts} color={SNAP_COLOR[pick.kind]} size={11} />
+    </>
+  );
+}
+
+function Dots3({ points, color, size }: { points: Vec3[]; color: string; size: number }) {
+  const arr = useMemo(() => new Float32Array(points.flat()), [points]);
+  if (!points.length) return null;
+  return (
+    <points key={points.length} renderOrder={11}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[arr, 3]} />
+      </bufferGeometry>
+      <pointsMaterial color={color} size={size} sizeAttenuation={false} depthTest={false} transparent />
+    </points>
+  );
+}
+
+/** Invisible ground plane that receives pointer events for picking tools. */
+function PickPlane({
+  onMove,
+  onPick,
+}: {
+  onMove: (e: ThreeEvent<PointerEvent>) => void;
+  onPick: (e: ThreeEvent<MouseEvent>) => void;
+}) {
+  return (
+    <mesh
+      onPointerMove={(e) => {
+        e.stopPropagation();
+        onMove(e);
+      }}
+      onPointerLeave={() => useScene.getState().setPick(null)}
+      onClick={(e) => {
+        if (e.delta > 3) return; // was an orbit drag
+        e.stopPropagation();
+        onPick(e);
+      }}
+    >
+      <planeGeometry args={[1e7, 1e7]} />
+      <meshBasicMaterial transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
 /** Ground-plane polyline sketching. Clicks add points; clicking the first point closes the profile. */
 function SketchLayer() {
   const pts = useScene((s) => s.sketchPoints);
   const cursor = useScene((s) => s.cursor);
   const camera = useThree((s) => s.camera);
+  const size = useThree((s) => s.size);
+  const snapPoints = useSnapPoints();
 
   const resolve = (e: ThreeEvent<PointerEvent | MouseEvent>): Pt => {
     const s = useScene.getState();
-    let p: Pt = [e.point.x, e.point.y];
-    if (s.snap.enabled) p = [snapValue(p[0], s.snap.step), snapValue(p[1], s.snap.step)];
 
-    // Shift: lock the segment to horizontal or vertical
+    // 1. Existing sketch points (so the profile can be closed)
+    const raw: Pt = [e.point.x, e.point.y];
+    const tol = camera.position.distanceTo(new THREE.Vector3(raw[0], raw[1], 0)) * 0.015;
+    for (const q of s.sketchPoints) {
+      if (Math.hypot(q[0] - raw[0], q[1] - raw[1]) < tol) {
+        s.setPick({ point: [q[0], q[1], 0], kind: 'end' });
+        return q;
+      }
+    }
+
+    // 2. Object snap: corners / midpoints / centres, projected onto the ground
+    const hit = findSnap(snapPoints, e.pointer, camera, size);
+    if (hit) {
+      s.setPick({ point: [hit.p.x, hit.p.y, hit.p.z], kind: hit.kind });
+      return [hit.p.x, hit.p.y];
+    }
+
+    // 3. Grid snap, then Shift = lock to horizontal/vertical
+    let p = raw;
+    if (s.snap.enabled) p = [snapValue(p[0], s.snap.step), snapValue(p[1], s.snap.step)];
     const last = s.sketchPoints.at(-1);
     if (e.nativeEvent.shiftKey && last) {
       p = Math.abs(p[0] - last[0]) >= Math.abs(p[1] - last[1]) ? [p[0], last[1]] : [last[0], p[1]];
     }
-
-    // Snap to existing sketch points (first point first, so closing is easy)
-    const tol = camera.position.distanceTo(new THREE.Vector3(p[0], p[1], 0)) * 0.015;
-    for (const q of s.sketchPoints) {
-      if (Math.hypot(q[0] - p[0], q[1] - p[1]) < tol) return q;
-    }
+    s.setPick(null);
     return p;
   };
 
@@ -166,24 +243,15 @@ function SketchLayer() {
 
   return (
     <group>
-      <mesh
-        onPointerMove={(e) => {
-          e.stopPropagation();
-          useScene.getState().setCursor(resolve(e));
-        }}
-        onPointerLeave={() => useScene.getState().setCursor(null)}
-        onClick={(e) => {
-          if (e.delta > 3) return; // was an orbit drag
-          e.stopPropagation();
+      <PickPlane
+        onMove={(e) => useScene.getState().setCursor(resolve(e))}
+        onPick={(e) => {
           const s = useScene.getState();
           const p = resolve(e);
           if (s.sketchPoints.length >= 3 && samePt(p, s.sketchPoints[0])) s.finishSketch();
           else s.addSketchPoint(p);
         }}
-      >
-        <planeGeometry args={[1e7, 1e7]} />
-        <meshBasicMaterial transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
-      </mesh>
+      />
 
       {preview.length >= 2 && (
         <Line
@@ -197,6 +265,65 @@ function SketchLayer() {
       <Dots points={pts.slice(1)} color="#ff9f1c" size={7} />
       <Dots points={pts.slice(0, 1)} color="#ffd166" size={11} />
       {cursor && <Dots points={[cursor]} color="#ffffff" size={6} />}
+      <SnapMarker />
+    </group>
+  );
+}
+
+/** Move by points: click a base point, then a target point; the selection moves by the difference. */
+function PickMoveLayer() {
+  const base = useScene((s) => s.pickBase);
+  const pick = useScene((s) => s.pick);
+  const selection = useScene((s) => s.selection);
+  const objects = useScene((s) => s.objects);
+  const camera = useThree((s) => s.camera);
+  const size = useThree((s) => s.size);
+  // Base point may be on the moving objects; the target must be somewhere else
+  const snapPoints = useSnapPoints(base ? selection : undefined);
+
+  const resolve = (e: ThreeEvent<PointerEvent | MouseEvent>): Vec3 => {
+    const s = useScene.getState();
+    const hit = findSnap(snapPoints, e.pointer, camera, size);
+    let p: Vec3;
+    if (hit) {
+      p = [hit.p.x, hit.p.y, hit.p.z];
+    } else {
+      p = [e.point.x, e.point.y, 0];
+      if (s.snap.enabled) p = [snapValue(p[0], s.snap.step), snapValue(p[1], s.snap.step), 0];
+    }
+    s.setPick({ point: p, kind: hit?.kind ?? null });
+    return p;
+  };
+
+  const moving = objects.filter((o) => selection.includes(o.id));
+  const d: Vec3 | null = base && pick ? [pick.point[0] - base[0], pick.point[1] - base[1], pick.point[2] - base[2]] : null;
+
+  return (
+    <group>
+      <PickPlane
+        onMove={(e) => resolve(e)}
+        onPick={(e) => {
+          const s = useScene.getState();
+          const p = resolve(e);
+          if (!s.pickBase) {
+            s.setPickBase(p);
+            s.print('Base point set. Now click the target point.');
+          } else s.finishPickMove(p);
+        }}
+      />
+      {/* Live preview of where the selection will land */}
+      {d && (
+        <group position={d}>
+          {moving.map((o) => (
+            <PartGhost key={o.id} obj={o} highlight />
+          ))}
+        </group>
+      )}
+      {base && pick && (
+        <Line points={[base, pick.point]} color="#ffd166" lineWidth={1.5} dashed dashSize={20} gapSize={10} depthTest={false} renderOrder={9} />
+      )}
+      {base && <Dots3 points={[base]} color="#ffd166" size={10} />}
+      <SnapMarker />
     </group>
   );
 }
@@ -205,7 +332,7 @@ export default function Viewport() {
   const objects = useScene((s) => s.objects);
   const selection = useScene((s) => s.selection);
   const unit = useScene((s) => s.unit);
-  const sketching = useScene((s) => s.tool === 'sketch');
+  const tool = useScene((s) => s.tool);
   const select = useScene((s) => s.select);
 
   // Grid spacing follows the working unit (values in mm)
@@ -213,7 +340,7 @@ export default function Viewport() {
 
   return (
     <Canvas
-      className={`viewport-canvas ${sketching ? 'sketching' : ''}`}
+      className={`viewport-canvas ${tool !== 'select' ? 'sketching' : ''}`}
       camera={{ position: [650, -750, 550], up: [0, 0, 1], fov: 45, near: 1, far: 1e6 }}
       onPointerMissed={() => {
         if (performance.now() - lastGizmoUse > 250) select(null);
@@ -248,7 +375,8 @@ export default function Viewport() {
           showParts={!!o.children && (selection.includes(o.id) || o.children.some((c) => selection.includes(c.id)))}
         />
       ))}
-      {sketching && <SketchLayer />}
+      {tool === 'sketch' && <SketchLayer />}
+      {tool === 'pickmove' && <PickMoveLayer />}
 
       <OrbitControls makeDefault enableDamping={false} target={[250, 0, 0]} />
       <GizmoHelper alignment="bottom-right" margin={[80, 80]}>

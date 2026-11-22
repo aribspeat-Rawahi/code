@@ -4,7 +4,9 @@ import { runCommand } from '../tools/commands';
 
 export default function CommandLine() {
   const log = useScene((s) => s.log);
-  const sketching = useScene((s) => s.tool === 'sketch');
+  const tool = useScene((s) => s.tool);
+  const hasBase = useScene((s) => !!s.pickBase);
+  const sketching = tool === 'sketch';
   const [text, setText] = useState('');
   const history = useRef<string[]>([]);
   const histIdx = useRef(-1);
@@ -38,13 +40,15 @@ export default function CommandLine() {
         ))}
       </div>
       <label className="cmd-input">
-        <span>{sketching ? 'Point (x y / @dx dy):' : 'Command:'}</span>
+        <span>
+          {sketching ? 'Point (x y / @dx dy):' : tool === 'pickmove' ? (hasBase ? 'Target (x y z / @dx dy dz):' : 'Base point (x y z):') : 'Command:'}
+        </span>
         <input
           id="command-input"
           value={text}
           spellCheck={false}
           autoComplete="off"
-          placeholder={sketching ? 'Enter to close profile' : 'Type HELP'}
+          placeholder={sketching ? 'Enter to close profile' : tool === 'pickmove' ? 'or click in the view · Esc cancels' : 'Type HELP'}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') submit();

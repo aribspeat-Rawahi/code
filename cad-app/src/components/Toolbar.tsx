@@ -67,6 +67,14 @@ export default function Toolbar() {
             {m.label}
           </button>
         ))}
+        <button
+          className={tool === 'pickmove' ? 'active' : ''}
+          onClick={() => (tool === 'pickmove' ? useScene.getState().setTool('select') : useScene.getState().startPickMove())}
+          disabled={!selectedId && tool !== 'pickmove'}
+          title="Move by points: base point → target point, with object snap (M)"
+        >
+          Move ⇢
+        </button>
       </div>
 
       <div className="group" aria-label="Edit">

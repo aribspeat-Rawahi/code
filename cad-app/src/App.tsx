@@ -7,6 +7,7 @@ import CommandLine from './components/CommandLine';
 import { useScene } from './store/sceneStore';
 import { newProject, openProject, saveProject } from './io/files';
 import { toDisplay, type Unit } from './units';
+import { SNAP_COLOR, SNAP_LABEL } from './tools/snap';
 
 function useShortcuts() {
   useEffect(() => {
@@ -42,6 +43,20 @@ function useShortcuts() {
         s.setSnap({ enabled: !s.snap.enabled });
         return;
       }
+      if (e.key === 'F3') {
+        e.preventDefault();
+        s.setSnap({ object: !s.snap.object });
+        s.print(`Object snap ${s.snap.object ? 'off' : 'on'}`);
+        return;
+      }
+
+      if (s.tool === 'pickmove') {
+        if (k === 'escape') {
+          s.setTool('select');
+          s.print('Move cancelled.');
+        }
+        return;
+      }
 
       if (s.tool === 'sketch') {
         if (k === 'enter') s.finishSketch();
@@ -57,6 +72,7 @@ function useShortcuts() {
       else if (k === 'e') s.setMode('rotate');
       else if (k === 'r') s.setMode('scale');
       else if (k === 's') s.setTool('sketch');
+      else if (k === 'm') s.startPickMove();
       else if (k === 'escape') s.select(null);
       else if (k === 'delete' || k === 'backspace') s.removeSelected();
     };
@@ -73,6 +89,8 @@ function StatusBar() {
   const snap = useScene((s) => s.snap);
   const cursor = useScene((s) => s.cursor);
   const last = useScene((s) => s.sketchPoints.at(-1));
+  const pick = useScene((s) => s.pick);
+  const base = useScene((s) => s.pickBase);
 
   const d = (mm: number) => Math.round(toDisplay(mm, unit) * 1000) / 1000;
   let sketchInfo = '';
@@ -85,6 +103,21 @@ function StatusBar() {
       sketchInfo += `   Length ${d(Math.hypot(dx, dy))}  Angle ${ang}°`;
     }
   }
+
+  if (tool === 'pickmove' && pick) {
+    const [x, y, z] = pick.point.map(d);
+    sketchInfo = `X ${x}  Y ${y}  Z ${z}`;
+    if (base) {
+      const dv = pick.point.map((v, i) => v - base[i]);
+      sketchInfo += `   Δ ${dv.map(d).join(', ')}  Distance ${d(Math.hypot(...dv))}`;
+    }
+  }
+
+  const hints: Record<string, string> = {
+    sketch: 'Click points · Shift = 90° · click first point or Enter to close · Backspace undo point · Esc cancel',
+    pickmove: base ? 'Click the target point · Esc cancel' : 'Click the base point on the object · Esc cancel',
+    select: 'Left-drag orbit · Right-drag pan · Wheel zoom · W/E/R transform · M move by points · S sketch · Space command',
+  };
 
   return (
     <footer className="status">
@@ -104,13 +137,21 @@ function StatusBar() {
       >
         Snap {snap.enabled ? `${d(snap.step)} ${unit} / ${snap.angle}°` : 'off'}
       </button>
-      <span>{tool === 'sketch' ? 'Tool: sketch' : `Tool: ${mode}`}</span>
+      <button
+        className={`status-btn ${snap.object ? 'active' : ''}`}
+        onClick={() => useScene.getState().setSnap({ object: !snap.object })}
+        title="Object snap: corners, midpoints and centres (F3)"
+      >
+        OSnap {snap.object ? 'on' : 'off'}
+      </button>
+      <span>{tool === 'select' ? `Tool: ${mode}` : `Tool: ${tool === 'pickmove' ? 'move by points' : 'sketch'}`}</span>
+      {pick?.kind && (
+        <span className="snap-kind" style={{ color: SNAP_COLOR[pick.kind] }}>
+          ● {SNAP_LABEL[pick.kind]}
+        </span>
+      )}
       {sketchInfo && <span className="coords">{sketchInfo}</span>}
-      <span className="hint">
-        {tool === 'sketch'
-          ? 'Click points · Shift = 90° · click first point or Enter to close · Backspace undo point · Esc cancel'
-          : 'Left-drag orbit · Right-drag pan · Wheel zoom · W/E/R transform · S sketch · Space command'}
-      </span>
+      <span className="hint">{hints[tool]}</span>
     </footer>
   );
 }
