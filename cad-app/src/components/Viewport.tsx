@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
-import { GizmoHelper, GizmoViewport, Grid, Line, OrbitControls, TransformControls } from '@react-three/drei';
+import { GizmoHelper, Html, GizmoViewport, Grid, Line, OrbitControls, TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
-import { useScene, type CadObject, type Vec3 } from '../store/sceneStore';
+import { dimOffset, useScene, type CadObject, type Vec3 } from '../store/sceneStore';
 import { buildObjectGeometry } from '../tools/geometry';
 import { featureEdges } from '../tools/edges';
 
@@ -18,7 +18,7 @@ function FeatureEdges({ geometry, color }: { geometry: THREE.BufferGeometry; col
 }
 import { samePt, snapValue, type Pt } from '../tools/sketch';
 import { collectSnapPoints, findSnap, SNAP_COLOR } from '../tools/snap';
-import { DEG2RAD } from '../units';
+import { DEG2RAD, toDisplay } from '../units';
 
 // Clicking a gizmo handle also fires the canvas "missed" event; ignore it briefly after a drag.
 let lastGizmoUse = 0;
@@ -270,16 +270,125 @@ function SketchLayer() {
   );
 }
 
-/** Move by points: click a base point, then a target point; the selection moves by the difference. */
-function PickMoveLayer() {
-  const base = useScene((s) => s.pickBase);
+/** Aligned dimension: extension lines, dimension line with architectural ticks, and a screen-space label. */
+function DimensionGraphic({
+  a,
+  b,
+  offset,
+  color,
+  selected = false,
+  onSelect,
+}: {
+  a: Vec3;
+  b: Vec3;
+  offset: Vec3;
+  color: string;
+  selected?: boolean;
+  onSelect?: (additive: boolean) => void;
+}) {
+  const unit = useScene((s) => s.unit);
+  const { geometry, mid, len } = useMemo(() => {
+    const A = new THREE.Vector3(...a);
+    const B = new THREE.Vector3(...b);
+    const O = new THREE.Vector3(...offset);
+    const len = A.distanceTo(B);
+    const dir = B.clone().sub(A).normalize();
+    const on = O.length() > 1e-9 ? O.clone().normalize() : new THREE.Vector3(0, 0, 1);
+    const A2 = A.clone().add(O);
+    const B2 = B.clone().add(O);
+    const ext = len * 0.04;
+    const tick = dir.clone().add(on).normalize().multiplyScalar(len * 0.025);
+    const segs = [
+      A, A2.clone().addScaledVector(on, ext), // extension lines
+      B, B2.clone().addScaledVector(on, ext),
+      A2.clone().addScaledVector(dir, -ext), B2.clone().addScaledVector(dir, ext), // dimension line
+      A2.clone().sub(tick), A2.clone().add(tick), // ticks
+      B2.clone().sub(tick), B2.clone().add(tick),
+    ];
+    const g = new THREE.BufferGeometry().setFromPoints(segs);
+    return { geometry: g, mid: A2.clone().lerp(B2, 0.5), len };
+  }, [a, b, offset]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  // The label lives inside the canvas container, so a click would also reach R3F and count as
+  // a "missed" click (clearing the selection). Handle it natively and stop it here.
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+  // drei <Html> mounts its content later in a separate root, so use a callback ref
+  const detach = useRef<(() => void) | null>(null);
+  const labelRef = useCallback((el: HTMLDivElement | null) => {
+    detach.current?.();
+    detach.current = null;
+    if (!el) return;
+    const stop = (e: Event) => e.stopPropagation();
+    const click = (e: MouseEvent) => {
+      e.stopPropagation();
+      onSelectRef.current?.(e.ctrlKey || e.shiftKey || e.metaKey);
+    };
+    el.addEventListener('pointerdown', stop);
+    el.addEventListener('pointerup', stop);
+    el.addEventListener('click', click);
+    detach.current = () => {
+      el.removeEventListener('pointerdown', stop);
+      el.removeEventListener('pointerup', stop);
+      el.removeEventListener('click', click);
+    };
+  }, []);
+
+  const value = Math.round(toDisplay(len, unit) * 100) / 100;
+  return (
+    <group>
+      <lineSegments geometry={geometry} renderOrder={8} raycast={() => null}>
+        <lineBasicMaterial color={selected ? '#ff9f1c' : color} depthTest={false} transparent />
+      </lineSegments>
+      <Html position={mid} center zIndexRange={[20, 0]} wrapperClass="dim-wrap">
+        <div
+          ref={labelRef}
+          className={`dim-label ${selected ? 'selected' : ''} ${onSelect ? '' : 'passive'}`}
+          style={{ borderColor: selected ? '#ff9f1c' : color }}
+        >
+          {value} <small>{unit}</small>
+        </div>
+      </Html>
+    </group>
+  );
+}
+
+function DimensionView({ obj, selected }: { obj: CadObject; selected: boolean }) {
+  const select = useScene((s) => s.select);
+  const interactive = useScene((s) => s.tool === 'select');
+  if (!obj.dim || !obj.visible) return null;
+  return (
+    <group position={obj.position}>
+      <DimensionGraphic
+        a={obj.dim.a}
+        b={obj.dim.b}
+        offset={obj.dim.offset}
+        color={obj.color}
+        selected={selected}
+        onSelect={interactive ? (add) => select(obj.id, add) : undefined}
+      />
+    </group>
+  );
+}
+
+/**
+ * Point-picking tools with object snap:
+ *  - pickmove: base point → target point; the selection moves by the difference
+ *  - measure: two points → distance in the command log
+ *  - dimension: two points + a third for the dimension line position
+ */
+function PickLayer() {
+  const tool = useScene((s) => s.tool);
+  const pts = useScene((s) => s.pickPoints);
   const pick = useScene((s) => s.pick);
   const selection = useScene((s) => s.selection);
   const objects = useScene((s) => s.objects);
+  const unit = useScene((s) => s.unit);
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
-  // Base point may be on the moving objects; the target must be somewhere else
-  const snapPoints = useSnapPoints(base ? selection : undefined);
+  // A moved object's own points are valid for the base, not for the target
+  const snapPoints = useSnapPoints(tool === 'pickmove' && pts.length ? selection : undefined);
 
   const resolve = (e: ThreeEvent<PointerEvent | MouseEvent>): Vec3 => {
     const s = useScene.getState();
@@ -295,34 +404,41 @@ function PickMoveLayer() {
     return p;
   };
 
-  const moving = objects.filter((o) => selection.includes(o.id));
-  const d: Vec3 | null = base && pick ? [pick.point[0] - base[0], pick.point[1] - base[1], pick.point[2] - base[2]] : null;
+  const base = pts[0];
+  const cur = pick?.point;
+  const d: Vec3 | null = base && cur ? [cur[0] - base[0], cur[1] - base[1], cur[2] - base[2]] : null;
+  const moving = tool === 'pickmove' ? objects.filter((o) => selection.includes(o.id)) : [];
 
   return (
     <group>
-      <PickPlane
-        onMove={(e) => resolve(e)}
-        onPick={(e) => {
-          const s = useScene.getState();
-          const p = resolve(e);
-          if (!s.pickBase) {
-            s.setPickBase(p);
-            s.print('Base point set. Now click the target point.');
-          } else s.finishPickMove(p);
-        }}
-      />
-      {/* Live preview of where the selection will land */}
-      {d && (
+      <PickPlane onMove={(e) => resolve(e)} onPick={(e) => useScene.getState().addPickPoint(resolve(e))} />
+
+      {/* Move: live preview of where the selection will land */}
+      {tool === 'pickmove' && d && (
         <group position={d}>
-          {moving.map((o) => (
-            <PartGhost key={o.id} obj={o} highlight />
-          ))}
+          {moving.map((o) =>
+            o.type === 'dimension' ? <DimensionView key={o.id} obj={o} selected /> : <PartGhost key={o.id} obj={o} highlight />,
+          )}
         </group>
       )}
-      {base && pick && (
-        <Line points={[base, pick.point]} color="#ffd166" lineWidth={1.5} dashed dashSize={20} gapSize={10} depthTest={false} renderOrder={9} />
+
+      {/* Rubber band from the last picked point */}
+      {cur && pts.length > 0 && !(tool === 'dimension' && pts.length === 2) && (
+        <Line points={[pts[pts.length - 1], cur]} color="#ffd166" lineWidth={1.5} dashed dashSize={20} gapSize={10} depthTest={false} renderOrder={9} />
       )}
-      {base && <Dots3 points={[base]} color="#ffd166" size={10} />}
+      {tool === 'measure' && base && cur && d && (
+        <Html position={[(base[0] + cur[0]) / 2, (base[1] + cur[1]) / 2, (base[2] + cur[2]) / 2]} center wrapperClass="dim-wrap">
+          <div className="dim-label passive">
+            {Math.round(toDisplay(Math.hypot(...d), unit) * 100) / 100} <small>{unit}</small>
+          </div>
+        </Html>
+      )}
+      {/* Dimension: preview follows the cursor once both points are set */}
+      {tool === 'dimension' && pts.length === 2 && cur && (
+        <DimensionGraphic a={pts[0]} b={pts[1]} offset={dimOffset(pts[0], pts[1], cur)} color="#ffd166" />
+      )}
+
+      <Dots3 points={pts} color="#ffd166" size={10} />
       <SnapMarker />
     </group>
   );
@@ -366,7 +482,10 @@ export default function Viewport() {
       />
       <axesHelper args={[grid.section]} />
 
-      {objects.map((o) => (
+      {objects.map((o) =>
+        o.type === 'dimension' ? (
+          <DimensionView key={o.id} obj={o} selected={selection.includes(o.id)} />
+        ) : (
         <ObjectMesh
           key={o.id}
           obj={o}
@@ -374,9 +493,10 @@ export default function Viewport() {
           primary={selection[0] === o.id}
           showParts={!!o.children && (selection.includes(o.id) || o.children.some((c) => selection.includes(c.id)))}
         />
-      ))}
+        ),
+      )}
       {tool === 'sketch' && <SketchLayer />}
-      {tool === 'pickmove' && <PickMoveLayer />}
+      {(tool === 'pickmove' || tool === 'measure' || tool === 'dimension') && <PickLayer />}
 
       <OrbitControls makeDefault enableDamping={false} target={[250, 0, 0]} />
       <GizmoHelper alignment="bottom-right" margin={[80, 80]}>

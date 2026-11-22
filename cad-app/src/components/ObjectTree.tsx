@@ -16,7 +16,13 @@ function Row({ o, depth, role }: { o: CadObject; depth: number; role?: string })
         onClick={(e: MouseEvent) => select(o.id, e.ctrlKey || e.shiftKey || e.metaKey)}
         title={o.op ? `${BOOLEAN_LABEL[o.op]} (first part is the base)` : undefined}
       >
-        {o.op ? <span className="op">{OP_ICON[o.op]}</span> : <span className="swatch" style={{ background: o.color }} />}
+        {o.op ? (
+          <span className="op">{OP_ICON[o.op]}</span>
+        ) : o.type === 'dimension' ? (
+          <span className="op" style={{ color: o.color }}>↔</span>
+        ) : (
+          <span className="swatch" style={{ background: o.color }} />
+        )}
         <span className={`name ${o.visible ? '' : 'hidden'}`}>{o.name}</span>
         {role && <span className="role">{role}</span>}
         <button

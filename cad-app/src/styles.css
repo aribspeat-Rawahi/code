@@ -112,3 +112,36 @@ select { padding: 4px 6px; }
 .parts li { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; }
 
 .snap-kind { font-weight: 600; }
+
+.dim-label {
+  background: rgba(27, 31, 36, 0.92);
+  color: #fff;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font: 600 12px/1.4 Consolas, 'Cascadia Mono', monospace;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.dim-label small { color: var(--muted); font-weight: 400; }
+.dim-label.selected { background: var(--accent-bg); }
+/* drei <Html> wrappers sit over the canvas: make them click-through, or R3F reads the click
+   position relative to the wrapper and picks the wrong 3D point. Only real labels take clicks. */
+.dim-wrap, .dim-wrap div { pointer-events: none; }
+.dim-wrap .dim-label:not(.passive) { pointer-events: auto; }
+.dim-label.passive { cursor: default; }
+.dim-value { font: 700 22px Consolas, monospace; color: var(--accent); margin: 4px 0; }
+
+.menu { position: relative; padding-right: 8px; border-right: 1px solid var(--border); }
+.menu-pop {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 50;
+  min-width: 190px; padding: 4px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex; flex-direction: column;
+}
+.menu-pop button { display: flex; justify-content: space-between; border: none; background: transparent; text-align: left; padding: 6px 8px; }
+.menu-pop button:hover { background: var(--panel-2); }
+.menu-pop small { color: var(--muted); }
+.menu-pop hr { border: none; border-top: 1px solid var(--border); margin: 4px 0; width: 100%; }

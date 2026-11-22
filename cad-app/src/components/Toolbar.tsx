@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { useScene, type TransformMode } from '../store/sceneStore';
 import { OBJECT_LABEL, PRIMITIVES } from '../tools/primitives';
 import { exportModel, newProject, openProject, saveProject } from '../io/files';
@@ -7,6 +8,50 @@ const MODES: { mode: TransformMode; label: string; key: string }[] = [
   { mode: 'rotate', label: 'Rotate', key: 'E' },
   { mode: 'scale', label: 'Scale', key: 'R' },
 ];
+
+function FileMenu() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const item = (label: string, hint: string, fn: () => void) => (
+    <button
+      role="menuitem"
+      onClick={() => {
+        setOpen(false);
+        fn();
+      }}
+    >
+      <span>{label}</span>
+      <small>{hint}</small>
+    </button>
+  );
+
+  return (
+    <div className="menu" ref={ref}>
+      <button className={open ? 'active' : ''} onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open}>
+        File ▾
+      </button>
+      {open && (
+        <div className="menu-pop" role="menu">
+          {item('New', 'Ctrl+N', newProject)}
+          {item('Open…', 'Ctrl+O', openProject)}
+          {item('Save…', 'Ctrl+S', saveProject)}
+          <hr />
+          {item('Export STL…', 'mm', () => exportModel('stl'))}
+          {item('Export OBJ…', 'mm', () => exportModel('obj'))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Toolbar() {
   const mode = useScene((s) => s.mode);
@@ -26,13 +71,7 @@ export default function Toolbar() {
         Nirman CAD <small>· {projectName}</small>
       </span>
 
-      <div className="group" aria-label="File">
-        <button onClick={newProject} title="New (Ctrl+N)">New</button>
-        <button onClick={openProject} title="Open project (Ctrl+O)">Open</button>
-        <button onClick={saveProject} title="Save project (Ctrl+S)">Save</button>
-        <button onClick={() => exportModel('stl')} title="Export STL (mm)">STL</button>
-        <button onClick={() => exportModel('obj')} title="Export OBJ (mm)">OBJ</button>
-      </div>
+      <FileMenu />
 
       <div className="group" aria-label="Create">
         {PRIMITIVES.map((t) => (
@@ -69,11 +108,38 @@ export default function Toolbar() {
         ))}
         <button
           className={tool === 'pickmove' ? 'active' : ''}
-          onClick={() => (tool === 'pickmove' ? useScene.getState().setTool('select') : useScene.getState().startPickMove())}
+          onClick={() => (tool === 'pickmove' ? useScene.getState().setTool('select') : useScene.getState().startPickTool('pickmove'))}
           disabled={!selectedId && tool !== 'pickmove'}
           title="Move by points: base point → target point, with object snap (M)"
         >
           Move ⇢
+        </button>
+      </div>
+
+      <div className="group" aria-label="Measure">
+        <button
+          className={tool === 'measure' ? 'active' : ''}
+          onClick={() => (tool === 'measure' ? useScene.getState().setTool('select') : useScene.getState().startPickTool('measure'))}
+          title="Measure distance between two points (Q)"
+        >
+          Dist
+        </button>
+        <button
+          className={tool === 'dimension' ? 'active' : ''}
+          onClick={() => (tool === 'dimension' ? useScene.getState().setTool('select') : useScene.getState().startPickTool('dimension'))}
+          title="Add a dimension: two points, then the line position (D)"
+        >
+          Dim
+        </button>
+        <button
+          onClick={() => {
+            const n = selectedId ? useScene.getState().autoDimension(selectedId) : 0;
+            if (n) useScene.getState().print(`Added ${n} dimensions.`);
+          }}
+          disabled={!selectedId}
+          title="Width, depth and height dimensions of the selected object"
+        >
+          Auto dim
         </button>
       </div>
 

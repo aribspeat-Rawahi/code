@@ -75,7 +75,7 @@ function pointsInParentFrame(o: CadObject): SnapPoint[] {
 
 /** All snap points of visible top-level objects, in world space. */
 export function collectSnapPoints(objects: CadObject[], exclude: Set<string> = new Set()): SnapPoint[] {
-  return objects.filter((o) => o.visible && !exclude.has(o.id)).flatMap(pointsInParentFrame);
+  return objects.filter((o) => o.visible && o.type !== 'dimension' && !exclude.has(o.id)).flatMap(pointsInParentFrame);
 }
 
 const PRIORITY: Record<SnapKind, number> = { end: 0, center: 1, mid: 2 };

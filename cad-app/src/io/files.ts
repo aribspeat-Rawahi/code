@@ -71,7 +71,7 @@ export async function openProject(): Promise<void> {
 
 export async function exportModel(kind: 'stl' | 'obj'): Promise<void> {
   const s = useScene.getState();
-  const visible = s.objects.filter((o) => o.visible);
+  const visible = s.objects.filter((o) => o.visible && o.type !== 'dimension');
   if (!visible.length) return print('Nothing visible to export.');
   try {
     const path = await saveData(kind, s.projectName, exportMesh(visible, kind));

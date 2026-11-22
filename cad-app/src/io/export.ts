@@ -10,7 +10,7 @@ export function exportMesh(objects: CadObject[], kind: 'stl' | 'obj'): string | 
   const geometries: THREE.BufferGeometry[] = [];
 
   for (const o of objects) {
-    if (!o.visible) continue;
+    if (!o.visible || o.type === 'dimension') continue;
     const g = buildObjectGeometry(o);
     geometries.push(g);
     const m = new THREE.Mesh(g);

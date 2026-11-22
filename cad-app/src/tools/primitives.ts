@@ -2,13 +2,13 @@ import * as THREE from 'three';
 import type { Pt } from './sketch';
 
 export type PrimitiveType = 'box' | 'cylinder' | 'sphere' | 'cone';
-export type ObjectType = PrimitiveType | 'extrusion' | 'boolean';
+export type ObjectType = PrimitiveType | 'extrusion' | 'boolean' | 'dimension';
 export type BooleanOp = 'union' | 'subtract' | 'intersect';
 export const BOOLEAN_OPS: BooleanOp[] = ['union', 'subtract', 'intersect'];
 export const BOOLEAN_LABEL: Record<BooleanOp, string> = { union: 'Union', subtract: 'Subtract', intersect: 'Intersect' };
 export type Params = Record<string, number>;
 
-export const OBJECT_TYPES: ObjectType[] = ['box', 'cylinder', 'sphere', 'cone', 'extrusion', 'boolean'];
+export const OBJECT_TYPES: ObjectType[] = ['box', 'cylinder', 'sphere', 'cone', 'extrusion', 'boolean', 'dimension'];
 export const PRIMITIVES: PrimitiveType[] = ['box', 'cylinder', 'sphere', 'cone'];
 
 export const OBJECT_LABEL: Record<ObjectType, string> = {
@@ -18,6 +18,7 @@ export const OBJECT_LABEL: Record<ObjectType, string> = {
   cone: 'Cone',
   extrusion: 'Extrusion',
   boolean: 'Boolean',
+  dimension: 'Dim',
 };
 
 // Default sizes in mm
@@ -28,6 +29,7 @@ export const DEFAULT_PARAMS: Record<ObjectType, Params> = {
   cone: { radius: 50, height: 100 },
   extrusion: { height: 100 },
   boolean: {},
+  dimension: {},
 };
 
 const SEGMENTS = 64;
@@ -75,8 +77,8 @@ export function buildGeometry(type: ObjectType, p: Params, profile?: Pt[]): THRE
       g = new THREE.ExtrudeGeometry(shape, { depth: Math.max(p.height, MIN), bevelEnabled: false });
       break;
     }
-    case 'boolean':
-      // Booleans are evaluated from their children in tools/geometry.ts
+    case 'boolean': // evaluated from its children in tools/geometry.ts
+    case 'dimension': // annotation, no solid geometry
       g = new THREE.BufferGeometry();
       break;
   }

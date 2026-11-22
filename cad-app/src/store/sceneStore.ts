@@ -9,14 +9,22 @@ import {
   type Params,
 } from '../tools/primitives';
 import { profileFromPoints, type Pt } from '../tools/sketch';
-import { matrixOf } from '../tools/geometry';
-import type { Unit } from '../units';
+import { buildObjectGeometry, matrixOf } from '../tools/geometry';
+import { toDisplay, type Unit } from '../units';
 import type { SnapKind } from '../tools/snap';
 import { findObject, flatten, removeIn, updateIn } from './tree';
 
 export type Vec3 = [number, number, number];
 export type TransformMode = 'translate' | 'rotate' | 'scale';
-export type Tool = 'select' | 'sketch' | 'pickmove';
+export type Tool = 'select' | 'sketch' | 'pickmove' | 'measure' | 'dimension';
+export type PickTool = 'pickmove' | 'measure' | 'dimension';
+
+/** Aligned dimension: measured points a, b and the offset vector to the dimension line (all mm, relative to position). */
+export interface DimData {
+  a: Vec3;
+  b: Vec3;
+  offset: Vec3;
+}
 
 export interface CadObject {
   id: string;
@@ -26,6 +34,7 @@ export interface CadObject {
   profile?: Pt[]; // mm, local XY (extrusions only)
   op?: BooleanOp; // booleans only
   children?: CadObject[]; // booleans only: [base, ...tools], transforms relative to this object
+  dim?: DimData; // dimensions only
   position: Vec3; // mm
   rotation: Vec3; // radians (XYZ Euler)
   scale: Vec3;
@@ -67,7 +76,8 @@ interface SceneState {
   sketchPoints: Pt[];
   cursor: Pt | null;
   pick: PickInfo | null;
-  pickBase: Vec3 | null;
+  /** Points picked so far by the active pick tool (move: base; measure: start; dimension: a, b). */
+  pickPoints: Vec3[];
   projectName: string;
   log: string[];
   past: CadObject[][];
@@ -93,9 +103,10 @@ interface SceneState {
   finishSketch: () => boolean;
   setCursor: (p: Pt | null) => void;
   setPick: (p: PickInfo | null) => void;
-  startPickMove: () => boolean;
-  setPickBase: (p: Vec3) => void;
-  finishPickMove: (target: Vec3) => void;
+  startPickTool: (tool: PickTool) => boolean;
+  addPickPoint: (p: Vec3) => void;
+  addDimension: (a: Vec3, b: Vec3, offset?: Vec3) => string | null;
+  autoDimension: (id: string) => number;
   setProjectName: (name: string) => void;
   print: (msg: string) => void;
   loadProject: (objects: CadObject[], unit: Unit, name: string) => void;
@@ -135,6 +146,29 @@ function cloneWithNewIds(o: CadObject): CadObject {
   return { ...structuredClone(o), id: newId(), children: o.children?.map(cloneWithNewIds) };
 }
 
+const PICK_HELP: Record<PickTool, string> = {
+  pickmove: 'Move: click the base point (e.g. a corner of the object), then the target point. Or type x y z / @dx dy dz. Esc cancels.',
+  measure: 'Measure: click two points (object snap works). Or type x y z / @dx dy dz. Esc ends.',
+  dimension: 'Dimension: click two points, then where the dimension line goes. Esc ends.',
+};
+
+/**
+ * Offset from the measured line a→b to the dimension line, taken from a third point c
+ * (its component perpendicular to a→b). Without c, offset sideways in plan (or along X for vertical lines).
+ */
+export function dimOffset(a: Vec3, b: Vec3, c: Vec3 | null): Vec3 {
+  const ab = new THREE.Vector3(...b).sub(new THREE.Vector3(...a));
+  const len = ab.length();
+  const d = ab.clone().normalize();
+  if (c) {
+    const ac = new THREE.Vector3(...c).sub(new THREE.Vector3(...a));
+    const perp = ac.sub(d.clone().multiplyScalar(ac.dot(d)));
+    if (perp.length() > len * 1e-3) return perp.toArray() as Vec3;
+  }
+  const side = Math.abs(d.z) > 0.99 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 0, 1)).normalize();
+  return side.multiplyScalar(Math.max(len * 0.15, 1)).toArray() as Vec3;
+}
+
 const DEFAULT_HEIGHT: Record<Unit, number> = { mm: 100, cm: 100, m: 3000 };
 const DEFAULT_STEP: Record<Unit, number> = { mm: 10, cm: 10, m: 100 };
 
@@ -150,7 +184,7 @@ export const useScene = create<SceneState>((set, get) => ({
   sketchPoints: [],
   cursor: null,
   pick: null,
-  pickBase: null,
+  pickPoints: [],
   projectName: 'untitled',
   log: ['Nirman CAD ready. Type HELP for commands.'],
   past: [],
@@ -223,6 +257,10 @@ export const useScene = create<SceneState>((set, get) => ({
       s.print('Error: select 2 or more top-level objects (Ctrl+click). The first selected is the base.');
       return false;
     }
+    if (parts.some((p) => p.type === 'dimension')) {
+      s.print('Error: dimensions cannot be part of a boolean. Deselect them first.');
+      return false;
+    }
     const base = parts[0];
     const origin = base.position;
     // The new object sits where the base was; children are stored relative to it
@@ -283,7 +321,7 @@ export const useScene = create<SceneState>((set, get) => ({
       sketchPoints: [],
       cursor: null,
       pick: null,
-      pickBase: null,
+      pickPoints: [],
       ...(tool === 'sketch' ? sel([]) : sel(s.selection)),
     })),
 
@@ -323,32 +361,113 @@ export const useScene = create<SceneState>((set, get) => ({
   setCursor: (p) => set({ cursor: p }),
   setPick: (pick) => set({ pick }),
 
-  startPickMove: () => {
+  startPickTool: (tool) => {
     const s = get();
-    if (!s.selection.some((id) => s.objects.some((o) => o.id === id))) {
+    if (tool === 'pickmove' && !s.selection.some((id) => s.objects.some((o) => o.id === id))) {
       s.print('Error: select the object(s) to move first.');
       return false;
     }
-    set({ tool: 'pickmove', pickBase: null, pick: null, sketchPoints: [], cursor: null });
-    s.print('Move: click the base point (e.g. a corner of the object), then the target point. Or type x y z / @dx dy dz. Esc cancels.');
+    set({ tool, pickPoints: [], pick: null, sketchPoints: [], cursor: null });
+    s.print(PICK_HELP[tool]);
     return true;
   },
 
-  setPickBase: (p) => set({ pickBase: p }),
-
-  finishPickMove: (target) => {
+  addPickPoint: (p) => {
     const s = get();
-    const base = s.pickBase;
-    if (!base) return;
-    const d: Vec3 = [target[0] - base[0], target[1] - base[1], target[2] - base[2]];
-    const ids = new Set(s.selection.filter((id) => s.objects.some((o) => o.id === id)));
-    const objects = s.objects.map((o) =>
-      ids.has(o.id) ? { ...o, position: [o.position[0] + d[0], o.position[1] + d[1], o.position[2] + d[2]] as Vec3 } : o,
-    );
-    set({ ...withHistory(s), objects, tool: 'select', pickBase: null, pick: null });
-    const r = (v: number) => Math.round(v * 1000) / 1000;
-    s.print(`Moved ${ids.size} object(s) by ${r(d[0])}, ${r(d[1])}, ${r(d[2])} mm (distance ${r(Math.hypot(...d))} mm).`);
+    const pts = [...s.pickPoints, p];
+    const r = (v: number) => Math.round(toDisplay(v, s.unit) * 1000) / 1000;
+
+    if (s.tool === 'pickmove') {
+      if (pts.length < 2) {
+        set({ pickPoints: pts });
+        return s.print('Base point set. Now the target point.');
+      }
+      const [base, target] = pts;
+      const d: Vec3 = [target[0] - base[0], target[1] - base[1], target[2] - base[2]];
+      const ids = new Set(s.selection.filter((id) => s.objects.some((o) => o.id === id)));
+      const objects = s.objects.map((o) =>
+        ids.has(o.id) ? { ...o, position: [o.position[0] + d[0], o.position[1] + d[1], o.position[2] + d[2]] as Vec3 } : o,
+      );
+      set({ ...withHistory(s), objects, tool: 'select', pickPoints: [], pick: null });
+      return s.print(`Moved ${ids.size} object(s) by ${d.map(r).join(', ')} ${s.unit} (distance ${r(Math.hypot(...d))} ${s.unit}).`);
+    }
+
+    if (s.tool === 'measure') {
+      if (pts.length < 2) {
+        set({ pickPoints: pts });
+        return s.print('First point set. Now the second point.');
+      }
+      const [a, b] = pts;
+      const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+      const ang = Math.round(((Math.atan2(d[1], d[0]) * 180) / Math.PI) * 100) / 100;
+      set({ pickPoints: [] }); // stay in the tool for the next measurement
+      return s.print(
+        `Distance ${r(Math.hypot(d[0], d[1], d[2]))} ${s.unit}   ΔX ${r(d[0])}  ΔY ${r(d[1])}  ΔZ ${r(d[2])}   angle in XY ${ang}°`,
+      );
+    }
+
+    if (s.tool === 'dimension') {
+      if (pts.length < 3) {
+        set({ pickPoints: pts });
+        return s.print(pts.length === 1 ? 'Now the second point.' : 'Now click where the dimension line goes.');
+      }
+      const [a, b, c] = pts;
+      s.addDimension(a, b, dimOffset(a, b, c));
+      set({ pickPoints: [], tool: 'dimension' }); // stay for the next dimension
+    }
   },
+
+  addDimension: (a, b, offset) => {
+    const s = get();
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    if (len < 1e-6) {
+      s.print('Error: the two points are the same.');
+      return null;
+    }
+    const id = newId();
+    const obj: CadObject = {
+      id,
+      name: nextName(s.objects, OBJECT_LABEL.dimension),
+      type: 'dimension',
+      params: {},
+      dim: { a, b, offset: offset ?? dimOffset(a, b, null) },
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+      color: '#ffd166',
+      visible: true,
+    };
+    set((st) => ({ ...withHistory(st), objects: [...st.objects, obj] }));
+    s.print(`${obj.name}: ${Math.round(toDisplay(len, s.unit) * 1000) / 1000} ${s.unit}`);
+    return id;
+  },
+
+  autoDimension: (id) => {
+    const s = get();
+    const o = s.objects.find((x) => x.id === id);
+    if (!o || o.type === 'dimension') {
+      s.print('Error: select a solid object to dimension.');
+      return 0;
+    }
+    const g = buildObjectGeometry(o);
+    g.applyMatrix4(matrixOf(o));
+    g.computeBoundingBox();
+    const bb = g.boundingBox;
+    g.dispose();
+    if (!bb || bb.isEmpty()) return 0;
+    const { min, max } = bb;
+    const gap = Math.max(max.x - min.x, max.y - min.y, max.z - min.z) * 0.15;
+    // Width along the front-bottom edge, depth along the right-bottom edge, height up the front-right corner
+    const dims: [Vec3, Vec3, Vec3][] = [
+      [[min.x, min.y, min.z], [max.x, min.y, min.z], [0, -gap, 0]],
+      [[max.x, min.y, min.z], [max.x, max.y, min.z], [gap, 0, 0]],
+      [[max.x, min.y, min.z], [max.x, min.y, max.z], [gap, -gap, 0].map((v) => v * 0.7071) as Vec3],
+    ];
+    let n = 0;
+    for (const [a, b, off] of dims) if (Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) > 1e-6 && s.addDimension(a, b, off)) n++;
+    return n;
+  },
+
   setProjectName: (projectName) => set({ projectName }),
   print: (msg) => set((s) => ({ log: [...s.log, msg].slice(-LOG_LIMIT) })),
 

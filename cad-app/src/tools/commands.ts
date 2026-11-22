@@ -15,6 +15,8 @@ const HELP = [
   'UNION  SUBTRACT  INTERSECT  (on the selection; first selected = base)   EXPLODE',
   'SELECT name[, name2, ...]  selects several, in order (e.g. SELECT Wall 1, Box 1)',
   'OSNAP on|off  (object snap, F3)',
+  'DIST (pick 2 points) or DIST x1 y1 x2 y2 / x1 y1 z1 x2 y2 z2     DIM (pick a, b, then line position)',
+  'DIM x1 y1 x2 y2 [offset]     AUTODIM (width/depth/height of the selected object)',
   'UNDO  REDO  UNITS mm|cm|m  SNAP on|off|step  NEW  OPEN  SAVE  EXPORT stl|obj',
 ];
 
@@ -150,20 +152,17 @@ export async function runCommand(raw: string): Promise<void> {
       return print('Sketch: click points or type "x y" / "@dx dy". Enter closes, Esc cancels, Shift locks to 90°.');
     case 'P':
     case '@': {
-      if (st().tool === 'pickmove') {
+      const t = st().tool;
+      if (t === 'pickmove' || t === 'measure' || t === 'dimension') {
         const v = nums(2, 3, cmd === 'P' ? 'x y [z]' : '@dx dy [dz]');
         if (!v) return;
-        const base = st().pickBase;
-        if (cmd === '@' && !base) return print('Error: set the base point first.');
+        const last = st().pickPoints.at(-1);
+        if (cmd === '@' && !last) return print('Error: pick the first point before a relative one.');
         const p: Vec3 =
           cmd === '@'
-            ? [base![0] + L(v[0]), base![1] + L(v[1]), base![2] + L(v[2] ?? 0)]
+            ? [last![0] + L(v[0]), last![1] + L(v[1]), last![2] + L(v[2] ?? 0)]
             : [L(v[0]), L(v[1]), L(v[2] ?? 0)];
-        if (!base) {
-          st().setPickBase(p);
-          return print('Base point set. Now the target point.');
-        }
-        st().finishPickMove(p);
+        st().addPickPoint(p);
         return;
       }
       if (st().tool !== 'sketch') return print('Error: start SKETCH or MOVE first.');
@@ -191,7 +190,7 @@ export async function runCommand(raw: string): Promise<void> {
 
     case 'MOVE': {
       if (!args.length) {
-        st().startPickMove();
+        st().startPickTool('pickmove');
         return;
       }
       const v = nums(2, 3, 'MOVE dx dy [dz]');
@@ -285,6 +284,48 @@ export async function runCommand(raw: string): Promise<void> {
       st().setUnit(u);
       return print(`Units: ${u}`);
     }
+    case 'DIST':
+    case 'MEASURE': {
+      if (!args.length) {
+        st().startPickTool('measure');
+        return;
+      }
+      const v = nums(4, 6, 'DIST x1 y1 x2 y2   or   DIST x1 y1 z1 x2 y2 z2   (or no args to pick)');
+      if (!v) return;
+      if (v.length === 5) return print('Usage: DIST x1 y1 x2 y2  or  DIST x1 y1 z1 x2 y2 z2');
+      const [a, b] = v.length === 4 ? [[v[0], v[1], 0], [v[2], v[3], 0]] : [v.slice(0, 3), v.slice(3)];
+      const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+      const r = (x: number) => Math.round(x * 1000) / 1000;
+      return print(`Distance ${r(Math.hypot(d[0], d[1], d[2]))} ${unit}   ΔX ${r(d[0])}  ΔY ${r(d[1])}  ΔZ ${r(d[2])}`);
+    }
+    case 'DIM': {
+      if (!args.length) {
+        st().startPickTool('dimension');
+        return;
+      }
+      const u = 'DIM x1 y1 x2 y2 [offset]   (or no args to pick in 3D)';
+      const v = nums(4, 5, u);
+      if (!v) return;
+      const a: Vec3 = [L(v[0]), L(v[1]), 0];
+      const b: Vec3 = [L(v[2]), L(v[3]), 0];
+      let off: Vec3 | undefined;
+      if (v[4] !== undefined) {
+        // Positive offset = left of the a→b direction in plan
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+        off = [(-(b[1] - a[1]) / len) * L(v[4]), ((b[0] - a[0]) / len) * L(v[4]), 0];
+      }
+      st().addDimension(a, b, off);
+      return;
+    }
+    case 'AUTODIM':
+    case 'DIMOBJ': {
+      const o = selected();
+      if (!o) return;
+      const n = st().autoDimension(o.id);
+      if (n) print(`Added ${n} dimensions to ${o.name}.`);
+      return;
+    }
+
     case 'OSNAP': {
       const a = args[0]?.toLowerCase();
       if (a !== 'on' && a !== 'off') return print('Usage: OSNAP on|off');

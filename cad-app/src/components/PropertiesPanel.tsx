@@ -65,6 +65,39 @@ export default function PropertiesPanel() {
     );
   }
 
+  if (obj.type === 'dimension' && obj.dim) {
+    const { a, b } = obj.dim;
+    const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const r = (mm: number) => Math.round(toDisplay(mm, unit) * 1000) / 1000;
+    return (
+      <aside className="panel right">
+        <h2>Properties</h2>
+        <label className="field wide">
+          <span>Name</span>
+          <input
+            key={obj.id}
+            defaultValue={obj.name}
+            maxLength={80}
+            onBlur={(e) => {
+              const name = e.target.value.trim();
+              if (name && name !== obj.name) updateObject(obj.id, { name });
+            }}
+          />
+        </label>
+        <h3>Dimension ({unit})</h3>
+        <p className="dim-value">{r(Math.hypot(d[0], d[1], d[2]))}</p>
+        <p className="empty">
+          ΔX {r(d[0])} · ΔY {r(d[1])} · ΔZ {r(d[2])}
+        </p>
+        <p className="empty">A dimension records fixed points. If the object changes, delete it and dimension again.</p>
+        <label className="field wide">
+          <span>Color</span>
+          <input type="color" value={obj.color} onChange={(e) => updateObject(obj.id, { color: e.target.value })} />
+        </label>
+      </aside>
+    );
+  }
+
   const setVec = (key: 'position' | 'rotation' | 'scale', i: number, v: number) => {
     const next = [...obj[key]] as Vec3;
     next[i] = v;

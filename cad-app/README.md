@@ -38,3 +38,11 @@ Tip: `SELECT Wall 1, Door 1` then `SUBTRACT` cuts a door opening.
 - Works in Sketch (draw along existing walls) and in **Move ⇢** (`M`, or `MOVE` with no arguments):
   select objects → click a base point → click the target point. You can also type `x y z` or `@dx dy dz`.
 - Example: select a door box, `M`, click its bottom corner, click the wall corner — it lands exactly there.
+
+## Measure & dimensions
+- **Dist** (`Q`, or `DIST`): click two points → distance, ΔX/ΔY/ΔZ in the command log. Typed: `DIST 0 0 3000 4000`.
+- **Dim** (`D`, or `DIM`): click point 1, point 2, then where the dimension line goes. Typed (plan): `DIM x1 y1 x2 y2 [offset]`.
+- **Auto dim** (`AUTODIM`): width, depth and height of the selected object.
+- Dimensions are saved with the project, follow the unit setting, and are skipped by STL/OBJ export.
+  They record fixed points (not linked to objects): if an object changes, re-dimension it.
+- File actions (New/Open/Save/Export) are under **File ▾**.

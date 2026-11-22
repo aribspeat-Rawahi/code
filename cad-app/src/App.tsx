@@ -50,10 +50,13 @@ function useShortcuts() {
         return;
       }
 
-      if (s.tool === 'pickmove') {
+      if (s.tool === 'pickmove' || s.tool === 'measure' || s.tool === 'dimension') {
         if (k === 'escape') {
-          s.setTool('select');
-          s.print('Move cancelled.');
+          if (s.pickPoints.length && s.tool !== 'pickmove') useScene.setState({ pickPoints: [] });
+          else {
+            s.setTool('select');
+            s.print('Done.');
+          }
         }
         return;
       }
@@ -72,7 +75,9 @@ function useShortcuts() {
       else if (k === 'e') s.setMode('rotate');
       else if (k === 'r') s.setMode('scale');
       else if (k === 's') s.setTool('sketch');
-      else if (k === 'm') s.startPickMove();
+      else if (k === 'm') s.startPickTool('pickmove');
+      else if (k === 'q') s.startPickTool('measure');
+      else if (k === 'd') s.startPickTool('dimension');
       else if (k === 'escape') s.select(null);
       else if (k === 'delete' || k === 'backspace') s.removeSelected();
     };
@@ -90,7 +95,7 @@ function StatusBar() {
   const cursor = useScene((s) => s.cursor);
   const last = useScene((s) => s.sketchPoints.at(-1));
   const pick = useScene((s) => s.pick);
-  const base = useScene((s) => s.pickBase);
+  const base = useScene((s) => s.pickPoints.at(-1));
 
   const d = (mm: number) => Math.round(toDisplay(mm, unit) * 1000) / 1000;
   let sketchInfo = '';
@@ -104,7 +109,7 @@ function StatusBar() {
     }
   }
 
-  if (tool === 'pickmove' && pick) {
+  if ((tool === 'pickmove' || tool === 'measure' || tool === 'dimension') && pick) {
     const [x, y, z] = pick.point.map(d);
     sketchInfo = `X ${x}  Y ${y}  Z ${z}`;
     if (base) {
@@ -116,7 +121,9 @@ function StatusBar() {
   const hints: Record<string, string> = {
     sketch: 'Click points · Shift = 90° · click first point or Enter to close · Backspace undo point · Esc cancel',
     pickmove: base ? 'Click the target point · Esc cancel' : 'Click the base point on the object · Esc cancel',
-    select: 'Left-drag orbit · Right-drag pan · Wheel zoom · W/E/R transform · M move by points · S sketch · Space command',
+    measure: base ? 'Click the second point · Esc restart' : 'Click the first point · Esc to finish',
+    dimension: 'Click point 1, point 2, then where the dimension line goes · Esc to finish',
+    select: 'Orbit: left-drag · Pan: right-drag · W/E/R transform · M move · Q measure · D dimension · S sketch · Space command',
   };
 
   return (
@@ -144,7 +151,7 @@ function StatusBar() {
       >
         OSnap {snap.object ? 'on' : 'off'}
       </button>
-      <span>{tool === 'select' ? `Tool: ${mode}` : `Tool: ${tool === 'pickmove' ? 'move by points' : 'sketch'}`}</span>
+      <span>Tool: {tool === 'select' ? mode : { sketch: 'sketch', pickmove: 'move by points', measure: 'measure', dimension: 'dimension' }[tool]}</span>
       {pick?.kind && (
         <span className="snap-kind" style={{ color: SNAP_COLOR[pick.kind] }}>
           ● {SNAP_LABEL[pick.kind]}

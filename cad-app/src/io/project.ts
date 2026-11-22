@@ -53,6 +53,14 @@ function sanitizeObject(raw: unknown, usedIds: Set<string>, depth = 0): CadObjec
     if (!children.length) return null;
   }
 
+  let dim: CadObject['dim'];
+  if (type === 'dimension') {
+    const d = (o.dim ?? {}) as Record<string, unknown>;
+    const ok = (v: unknown) => Array.isArray(v) && v.length === 3 && v.every(isNum);
+    if (!ok(d.a) || !ok(d.b) || !ok(d.offset)) return null;
+    dim = { a: vec3(d.a, [0, 0, 0]), b: vec3(d.b, [0, 0, 0]), offset: vec3(d.offset, [0, 0, 0]) };
+  }
+
   let id = typeof o.id === 'string' && /^[\w-]{1,64}$/.test(o.id) ? o.id : newId();
   if (usedIds.has(id)) id = newId();
   usedIds.add(id);
@@ -68,6 +76,7 @@ function sanitizeObject(raw: unknown, usedIds: Set<string>, depth = 0): CadObjec
     profile,
     op,
     children,
+    dim,
     position: vec3(o.position, [0, 0, 0]),
     rotation: vec3(o.rotation, [0, 0, 0]),
     scale,
