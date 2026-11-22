@@ -1,0 +1,16 @@
+appId: com.nirmancad.app
+productName: Nirman CAD
+directories:
+  output: release
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+win:
+  target:
+    - nsis
+  artifactName: NirmanCAD-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
