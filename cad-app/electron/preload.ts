@@ -1,7 +1,8 @@
-import { contextBridge } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 
-// Minimal, explicit API surface. File open/save IPC will be added here later.
+// Minimal, explicit API surface: the renderer never gets raw ipcRenderer or fs access.
 contextBridge.exposeInMainWorld('nirman', {
   platform: process.platform,
-  versions: { electron: process.versions.electron, chrome: process.versions.chrome },
+  saveFile: (req: unknown) => ipcRenderer.invoke('file:save', req),
+  openProject: () => ipcRenderer.invoke('file:open-project'),
 });

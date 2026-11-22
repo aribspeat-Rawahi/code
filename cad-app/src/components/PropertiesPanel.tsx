@@ -94,6 +94,8 @@ export default function PropertiesPanel() {
         />
       ))}
 
+      {obj.profile && <p className="empty">Profile: {obj.profile.length} points</p>}
+
       <h3>Position ({unit})</h3>
       {AXES.map((a, i) => (
         <NumField

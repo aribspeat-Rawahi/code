@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { Edges, GizmoHelper, GizmoViewport, Grid, OrbitControls, TransformControls } from '@react-three/drei';
-import type * as THREE from 'three';
+import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
+import { Edges, GizmoHelper, GizmoViewport, Grid, Line, OrbitControls, TransformControls } from '@react-three/drei';
+import * as THREE from 'three';
 import { useScene, type CadObject, type Vec3 } from '../store/sceneStore';
 import { buildGeometry } from '../tools/primitives';
+import { samePt, snapValue, type Pt } from '../tools/sketch';
+import { DEG2RAD } from '../units';
 
 // Clicking a gizmo handle also fires the canvas "missed" event; ignore it briefly after a drag.
 let lastGizmoUse = 0;
@@ -11,10 +13,15 @@ let lastGizmoUse = 0;
 function ObjectMesh({ obj, selected }: { obj: CadObject; selected: boolean }) {
   const ref = useRef<THREE.Mesh>(null!);
   const mode = useScene((s) => s.mode);
+  const sketching = useScene((s) => s.tool === 'sketch');
+  const snap = useScene((s) => s.snap);
   const select = useScene((s) => s.select);
   const updateObject = useScene((s) => s.updateObject);
 
-  const geometry = useMemo(() => buildGeometry(obj.type, obj.params), [obj.type, obj.params]);
+  const geometry = useMemo(
+    () => buildGeometry(obj.type, obj.params, obj.profile),
+    [obj.type, obj.params, obj.profile],
+  );
   useEffect(() => () => geometry.dispose(), [geometry]);
 
   const commitTransform = () => {
@@ -36,17 +43,22 @@ function ObjectMesh({ obj, selected }: { obj: CadObject; selected: boolean }) {
       rotation={obj.rotation}
       scale={obj.scale}
       visible={obj.visible}
-      onClick={(e) => {
-        e.stopPropagation();
-        select(obj.id);
-      }}
+      // While sketching, objects must not swallow clicks meant for the ground plane
+      onClick={
+        sketching
+          ? undefined
+          : (e) => {
+              e.stopPropagation();
+              select(obj.id);
+            }
+      }
     >
       <meshStandardMaterial color={obj.color} metalness={0.1} roughness={0.6} />
       <Edges threshold={20} color={selected ? '#ff9f1c' : '#1b1f24'} />
     </mesh>
   );
 
-  if (!selected || !obj.visible) return mesh;
+  if (!selected || !obj.visible || sketching) return mesh;
   return (
     <>
       {mesh}
@@ -54,6 +66,9 @@ function ObjectMesh({ obj, selected }: { obj: CadObject; selected: boolean }) {
         object={ref}
         mode={mode}
         size={0.8}
+        translationSnap={snap.enabled ? snap.step : null}
+        rotationSnap={snap.enabled ? snap.angle * DEG2RAD : null}
+        scaleSnap={snap.enabled ? 0.1 : null}
         onMouseDown={() => (lastGizmoUse = performance.now())}
         onMouseUp={commitTransform}
       />
@@ -61,10 +76,89 @@ function ObjectMesh({ obj, selected }: { obj: CadObject; selected: boolean }) {
   );
 }
 
+/** Pixel-sized dots that stay visible at any zoom level. */
+function Dots({ points, color, size }: { points: Pt[]; color: string; size: number }) {
+  const arr = useMemo(() => new Float32Array(points.flatMap(([x, y]) => [x, y, 0.5])), [points]);
+  if (!points.length) return null;
+  return (
+    <points key={points.length} renderOrder={10}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[arr, 3]} />
+      </bufferGeometry>
+      <pointsMaterial color={color} size={size} sizeAttenuation={false} depthTest={false} />
+    </points>
+  );
+}
+
+/** Ground-plane polyline sketching. Clicks add points; clicking the first point closes the profile. */
+function SketchLayer() {
+  const pts = useScene((s) => s.sketchPoints);
+  const cursor = useScene((s) => s.cursor);
+  const camera = useThree((s) => s.camera);
+
+  const resolve = (e: ThreeEvent<PointerEvent | MouseEvent>): Pt => {
+    const s = useScene.getState();
+    let p: Pt = [e.point.x, e.point.y];
+    if (s.snap.enabled) p = [snapValue(p[0], s.snap.step), snapValue(p[1], s.snap.step)];
+
+    // Shift: lock the segment to horizontal or vertical
+    const last = s.sketchPoints.at(-1);
+    if (e.nativeEvent.shiftKey && last) {
+      p = Math.abs(p[0] - last[0]) >= Math.abs(p[1] - last[1]) ? [p[0], last[1]] : [last[0], p[1]];
+    }
+
+    // Snap to existing sketch points (first point first, so closing is easy)
+    const tol = camera.position.distanceTo(new THREE.Vector3(p[0], p[1], 0)) * 0.015;
+    for (const q of s.sketchPoints) {
+      if (Math.hypot(q[0] - p[0], q[1] - p[1]) < tol) return q;
+    }
+    return p;
+  };
+
+  const preview = cursor && pts.length ? [...pts, cursor] : pts;
+
+  return (
+    <group>
+      <mesh
+        onPointerMove={(e) => {
+          e.stopPropagation();
+          useScene.getState().setCursor(resolve(e));
+        }}
+        onPointerLeave={() => useScene.getState().setCursor(null)}
+        onClick={(e) => {
+          if (e.delta > 3) return; // was an orbit drag
+          e.stopPropagation();
+          const s = useScene.getState();
+          const p = resolve(e);
+          if (s.sketchPoints.length >= 3 && samePt(p, s.sketchPoints[0])) s.finishSketch();
+          else s.addSketchPoint(p);
+        }}
+      >
+        <planeGeometry args={[1e7, 1e7]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+
+      {preview.length >= 2 && (
+        <Line
+          points={preview.map(([x, y]) => [x, y, 0.5] as [number, number, number])}
+          color="#ff9f1c"
+          lineWidth={2}
+          depthTest={false}
+          renderOrder={9}
+        />
+      )}
+      <Dots points={pts.slice(1)} color="#ff9f1c" size={7} />
+      <Dots points={pts.slice(0, 1)} color="#ffd166" size={11} />
+      {cursor && <Dots points={[cursor]} color="#ffffff" size={6} />}
+    </group>
+  );
+}
+
 export default function Viewport() {
   const objects = useScene((s) => s.objects);
   const selectedId = useScene((s) => s.selectedId);
   const unit = useScene((s) => s.unit);
+  const sketching = useScene((s) => s.tool === 'sketch');
   const select = useScene((s) => s.select);
 
   // Grid spacing follows the working unit (values in mm)
@@ -72,7 +166,7 @@ export default function Viewport() {
 
   return (
     <Canvas
-      className="viewport-canvas"
+      className={`viewport-canvas ${sketching ? 'sketching' : ''}`}
       camera={{ position: [650, -750, 550], up: [0, 0, 1], fov: 45, near: 1, far: 1e6 }}
       onPointerMissed={() => {
         if (performance.now() - lastGizmoUse > 250) select(null);
@@ -101,6 +195,7 @@ export default function Viewport() {
       {objects.map((o) => (
         <ObjectMesh key={o.id} obj={o} selected={o.id === selectedId} />
       ))}
+      {sketching && <SketchLayer />}
 
       <OrbitControls makeDefault enableDamping={false} target={[250, 0, 0]} />
       <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
