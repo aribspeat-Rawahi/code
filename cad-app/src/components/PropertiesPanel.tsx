@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useScene, type Vec3 } from '../store/sceneStore';
+import { findObject, findParent } from '../store/tree';
+import { BOOLEAN_LABEL } from '../tools/primitives';
 import { DEG2RAD, RAD2DEG, fromDisplay, toDisplay } from '../units';
 
 /** Numeric input that commits on Enter or blur, so typing doesn't spam undo history. */
@@ -47,7 +49,10 @@ function NumField({
 const AXES = ['X', 'Y', 'Z'] as const;
 
 export default function PropertiesPanel() {
-  const obj = useScene((s) => s.objects.find((o) => o.id === s.selectedId));
+  const obj = useScene((s) => findObject(s.objects, s.selectedId));
+  const parent = useScene((s) => (s.selectedId ? findParent(s.objects, s.selectedId) : undefined));
+  const extra = useScene((s) => s.selection.length - 1);
+  const select = useScene((s) => s.select);
   const unit = useScene((s) => s.unit);
   const updateObject = useScene((s) => s.updateObject);
 
@@ -83,7 +88,29 @@ export default function PropertiesPanel() {
         />
       </label>
 
-      <h3>Dimensions ({unit})</h3>
+      {extra > 0 && <p className="note">+{extra} more selected. Boolean uses this one as the base.</p>}
+      {parent && (
+        <p className="note">
+          Part of <a onClick={() => select(parent.id)}>{parent.name}</a>. Position is relative to it.
+        </p>
+      )}
+
+      {obj.op && obj.children && (
+        <>
+          <h3>{BOOLEAN_LABEL[obj.op]}</h3>
+          <ul className="parts">
+            {obj.children.map((c, i) => (
+              <li key={c.id}>
+                <a onClick={() => select(c.id)}>{c.name}</a>
+                <span className="role">{i === 0 ? 'base' : obj.op === 'subtract' ? 'cut' : 'tool'}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="empty">Click a part to edit its size; the result updates live. EXPLODE to split it again.</p>
+        </>
+      )}
+
+      {Object.keys(obj.params).length > 0 && <h3>Dimensions ({unit})</h3>}
       {Object.entries(obj.params).map(([k, v]) => (
         <NumField
           key={k}

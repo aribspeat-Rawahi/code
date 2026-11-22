@@ -1,5 +1,5 @@
 import { newId, type CadObject, type Vec3 } from '../store/sceneStore';
-import { DEFAULT_PARAMS, OBJECT_TYPES, type ObjectType, type Params } from '../tools/primitives';
+import { BOOLEAN_OPS, DEFAULT_PARAMS, OBJECT_TYPES, type BooleanOp, type ObjectType, type Params } from '../tools/primitives';
 import type { Pt } from '../tools/sketch';
 import type { Unit } from '../units';
 
@@ -8,6 +8,7 @@ const VERSION = 1;
 const MAX_OBJECTS = 100_000;
 const MAX_PROFILE_POINTS = 10_000;
 const UNITS: Unit[] = ['mm', 'cm', 'm'];
+const MAX_DEPTH = 32;
 
 export function serializeProject(objects: CadObject[], unit: Unit): string {
   return JSON.stringify({ format: FORMAT, version: VERSION, unit, objects }, null, 2);
@@ -20,8 +21,8 @@ function vec3(v: unknown, fallback: Vec3): Vec3 {
 }
 
 /** Validate one untrusted object; returns null if it can't be used. */
-function sanitizeObject(raw: unknown, usedIds: Set<string>): CadObject | null {
-  if (!raw || typeof raw !== 'object') return null;
+function sanitizeObject(raw: unknown, usedIds: Set<string>, depth = 0): CadObject | null {
+  if (!raw || typeof raw !== 'object' || depth > MAX_DEPTH) return null;
   const o = raw as Record<string, unknown>;
   if (!OBJECT_TYPES.includes(o.type as ObjectType)) return null;
   const type = o.type as ObjectType;
@@ -41,6 +42,17 @@ function sanitizeObject(raw: unknown, usedIds: Set<string>): CadObject | null {
     profile = (o.profile as number[][]).map((p) => [p[0], p[1]] as Pt);
   }
 
+  let op: BooleanOp | undefined;
+  let children: CadObject[] | undefined;
+  if (type === 'boolean') {
+    if (!BOOLEAN_OPS.includes(o.op as BooleanOp) || !Array.isArray(o.children)) return null;
+    op = o.op as BooleanOp;
+    children = o.children
+      .map((c) => sanitizeObject(c, usedIds, depth + 1))
+      .filter((c): c is CadObject => c !== null);
+    if (!children.length) return null;
+  }
+
   let id = typeof o.id === 'string' && /^[\w-]{1,64}$/.test(o.id) ? o.id : newId();
   if (usedIds.has(id)) id = newId();
   usedIds.add(id);
@@ -54,6 +66,8 @@ function sanitizeObject(raw: unknown, usedIds: Set<string>): CadObject | null {
     type,
     params,
     profile,
+    op,
+    children,
     position: vec3(o.position, [0, 0, 0]),
     rotation: vec3(o.rotation, [0, 0, 0]),
     scale,

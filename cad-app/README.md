@@ -26,3 +26,9 @@ Windows installers are also built by GitHub Actions (`.github/workflows/build-wi
 
 Shortcuts: `W/E/R` move/rotate/scale, `S` sketch, `F9` snap, `Ctrl+Z/Y`, `Ctrl+S/O/N`.
 Sketch: click points, `Shift` locks to 90°, click first point or `Enter` to close.
+
+## Booleans (non-destructive)
+Select the base first, then Ctrl+click the tools, then **Union / Subtract / Intersect** (or type `SUBTRACT`).
+Parts stay editable: click a part in the Objects tree and change its size — the result rebuilds.
+Hide a part (eye icon) to suppress that cut. `EXPLODE` splits a boolean back into its parts.
+Tip: `SELECT Wall 1, Door 1` then `SUBTRACT` cuts a door opening.

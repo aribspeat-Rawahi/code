@@ -1,7 +1,6 @@
 import { useScene, type TransformMode } from '../store/sceneStore';
 import { OBJECT_LABEL, PRIMITIVES } from '../tools/primitives';
 import { exportModel, newProject, openProject, saveProject } from '../io/files';
-import { toDisplay, type Unit } from '../units';
 
 const MODES: { mode: TransformMode; label: string; key: string }[] = [
   { mode: 'translate', label: 'Move', key: 'W' },
@@ -12,13 +11,14 @@ const MODES: { mode: TransformMode; label: string; key: string }[] = [
 export default function Toolbar() {
   const mode = useScene((s) => s.mode);
   const tool = useScene((s) => s.tool);
-  const unit = useScene((s) => s.unit);
-  const snap = useScene((s) => s.snap);
   const selectedId = useScene((s) => s.selectedId);
+  const topLevelSelected = useScene((s) => s.selection.filter((id) => s.objects.some((o) => o.id === id)).length);
+  const isBoolean = useScene((s) => s.objects.some((o) => o.id === s.selectedId && o.type === 'boolean'));
   const canUndo = useScene((s) => s.past.length > 0);
   const canRedo = useScene((s) => s.future.length > 0);
   const projectName = useScene((s) => s.projectName);
-  const { addObject, setMode, setTool, setUnit, setSnap, removeObject, undo, redo } = useScene.getState();
+  const { addObject, setMode, setTool, removeSelected, booleanOp, explode, undo, redo } = useScene.getState();
+  const boolHint = topLevelSelected < 2 ? ' — Ctrl+click 2+ objects first; the first is the base' : '';
 
   return (
     <header className="toolbar">
@@ -49,6 +49,13 @@ export default function Toolbar() {
         </button>
       </div>
 
+      <div className="group" aria-label="Boolean">
+        <button onClick={() => booleanOp('union')} disabled={topLevelSelected < 2} title={`Union: merge into one${boolHint}`}>Union</button>
+        <button onClick={() => booleanOp('subtract')} disabled={topLevelSelected < 2} title={`Subtract: cut the others out of the base${boolHint}`}>Subtract</button>
+        <button onClick={() => booleanOp('intersect')} disabled={topLevelSelected < 2} title={`Intersect: keep only the overlap${boolHint}`}>Intersect</button>
+        <button onClick={() => selectedId && explode(selectedId)} disabled={!isBoolean} title="Explode: split a boolean back into its parts">Explode</button>
+      </div>
+
       <div className="group" aria-label="Transform">
         {MODES.map((m) => (
           <button
@@ -65,27 +72,11 @@ export default function Toolbar() {
       <div className="group" aria-label="Edit">
         <button onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">Undo</button>
         <button onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Y)">Redo</button>
-        <button onClick={() => selectedId && removeObject(selectedId)} disabled={!selectedId} title="Delete (Del)">
+        <button onClick={removeSelected} disabled={!selectedId} title="Delete selected (Del)">
           Delete
         </button>
       </div>
 
-      <button
-        className={snap.enabled ? 'active' : ''}
-        onClick={() => setSnap({ enabled: !snap.enabled })}
-        title={`Snap to ${toDisplay(snap.step, unit)} ${unit} / ${snap.angle}° (F9). Change step: SNAP <value>`}
-      >
-        Snap {toDisplay(snap.step, unit)}
-      </button>
-
-      <label className="unit">
-        Unit
-        <select value={unit} onChange={(e) => setUnit(e.target.value as Unit)}>
-          <option value="mm">mm</option>
-          <option value="cm">cm</option>
-          <option value="m">m</option>
-        </select>
-      </label>
     </header>
   );
 }

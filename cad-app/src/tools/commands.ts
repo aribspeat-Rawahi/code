@@ -1,4 +1,5 @@
-import { useScene, type Vec3 } from '../store/sceneStore';
+import { useScene, type CadObject, type Vec3 } from '../store/sceneStore';
+import { findObject, flatten } from '../store/tree';
 import { exportModel, newProject, openProject, saveProject } from '../io/files';
 import { DEG2RAD, fromDisplay, toDisplay, type Unit } from '../units';
 import { wallPoints, profileFromPoints, type Pt } from './sketch';
@@ -10,6 +11,8 @@ const HELP = [
   'SKETCH  then click points, or type  x y  /  @dx dy ;  Enter or CLOSE to extrude, CANCEL to stop',
   'HEIGHT h  (extrude height for sketches)',
   'MOVE dx dy dz   MOVETO x y z   ROTATE deg [X|Y|Z]   COPY [dx dy dz]   DEL   SELECT name   LIST',
+  'UNION  SUBTRACT  INTERSECT  (on the selection; first selected = base)   EXPLODE',
+  'SELECT name[, name2, ...]  selects several, in order (e.g. SELECT Wall 1, Box 1)',
   'UNDO  REDO  UNITS mm|cm|m  SNAP on|off|step  NEW  OPEN  SAVE  EXPORT stl|obj',
 ];
 
@@ -64,7 +67,7 @@ export async function runCommand(raw: string): Promise<void> {
     v.length >= at + 3 ? [L(v[at]), L(v[at + 1]), L(v[at + 2])] : undefined;
   const selected = () => {
     const s = st();
-    const o = s.objects.find((x) => x.id === s.selectedId);
+    const o = findObject(s.objects, s.selectedId);
     if (!o) print('Error: select an object first.');
     return o;
   };
@@ -204,25 +207,50 @@ export async function runCommand(raw: string): Promise<void> {
       return;
     }
     case 'DEL':
-    case 'DELETE': {
-      const o = selected();
-      if (o) st().removeObject(o.id);
+    case 'DELETE':
+      if (!st().selection.length) return print('Error: select an object first.');
+      st().removeSelected();
       return;
-    }
     case 'SELECT': {
-      const name = args.join(' ').toLowerCase();
-      const o = st().objects.find((x) => x.name.toLowerCase() === name);
-      if (!o) return print(`Error: no object named "${args.join(' ')}".`);
+      // Names may contain spaces, so split the raw text on commas only
+      const names = line.slice(tokens[0].length).split(',').map((n) => n.trim().toLowerCase()).filter(Boolean);
+      if (!names.length) return print('Usage: SELECT name[, name2, ...]');
+      const all = flatten(st().objects);
+      const ids: string[] = [];
+      for (const n of names) {
+        const o = all.find((x) => x.name.toLowerCase() === n);
+        if (!o) return print(`Error: no object named "${n}".`);
+        ids.push(o.id);
+      }
       st().setTool('select');
-      st().select(o.id);
+      st().setSelection(ids);
+      return print(`Selected ${ids.length}.`);
+    }
+    case 'LIST': {
+      if (!st().objects.length) return print('No objects.');
+      const walk = (list: CadObject[], indent: string): void =>
+        list.forEach((o) => {
+          print(`${indent}${o.name} (${o.op ?? o.type}) at ${o.position.map((p) => toDisplay(p, unit)).join(', ')} ${unit}`);
+          if (o.children) walk(o.children, indent + '  ');
+        });
+      walk(st().objects, '');
       return;
     }
-    case 'LIST':
-      if (!st().objects.length) return print('No objects.');
-      st().objects.forEach((o) =>
-        print(`${o.name} (${o.type}) at ${o.position.map((p) => toDisplay(p, unit)).join(', ')} ${unit}`),
-      );
+
+    case 'UNION':
+    case 'SUBTRACT':
+    case 'SUB':
+    case 'INTERSECT':
+    case 'INT': {
+      const op = cmd.startsWith('U') ? 'union' : cmd.startsWith('S') ? 'subtract' : 'intersect';
+      st().booleanOp(op);
       return;
+    }
+    case 'EXPLODE': {
+      const o = selected();
+      if (o) st().explode(o.id);
+      return;
+    }
 
     case 'UNDO':
       return st().undo();

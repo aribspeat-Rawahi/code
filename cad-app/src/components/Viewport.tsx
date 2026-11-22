@@ -1,16 +1,50 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
-import { Edges, GizmoHelper, GizmoViewport, Grid, Line, OrbitControls, TransformControls } from '@react-three/drei';
+import { GizmoHelper, GizmoViewport, Grid, Line, OrbitControls, TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { useScene, type CadObject, type Vec3 } from '../store/sceneStore';
-import { buildGeometry } from '../tools/primitives';
+import { buildObjectGeometry } from '../tools/geometry';
+import { featureEdges } from '../tools/edges';
+
+/** Hard edges of a mesh, robust to the T-junctions boolean results contain. */
+function FeatureEdges({ geometry, color }: { geometry: THREE.BufferGeometry; color: string }) {
+  const edges = useMemo(() => featureEdges(geometry), [geometry]);
+  useEffect(() => () => edges.dispose(), [edges]);
+  return (
+    <lineSegments geometry={edges} raycast={() => null}>
+      <lineBasicMaterial color={color} />
+    </lineSegments>
+  );
+}
 import { samePt, snapValue, type Pt } from '../tools/sketch';
 import { DEG2RAD } from '../units';
 
 // Clicking a gizmo handle also fires the canvas "missed" event; ignore it briefly after a drag.
 let lastGizmoUse = 0;
 
-function ObjectMesh({ obj, selected }: { obj: CadObject; selected: boolean }) {
+/** Translucent preview of a boolean's parts, so hidden tools (e.g. a door cut-out) can be seen. */
+function PartGhost({ obj, highlight }: { obj: CadObject; highlight: boolean }) {
+  const geometry = useMemo(() => buildObjectGeometry(obj), [obj]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  return (
+    <mesh geometry={geometry} position={obj.position} rotation={obj.rotation} scale={obj.scale} visible={obj.visible} raycast={() => null}>
+      <meshBasicMaterial color={highlight ? '#ff9f1c' : '#9fb4d0'} transparent opacity={highlight ? 0.25 : 0.08} depthWrite={false} />
+      <FeatureEdges geometry={geometry} color={highlight ? '#ff9f1c' : '#7d8fa8'} />
+    </mesh>
+  );
+}
+
+function ObjectMesh({
+  obj,
+  selected,
+  primary,
+  showParts,
+}: {
+  obj: CadObject;
+  selected: boolean;
+  primary: boolean;
+  showParts: boolean;
+}) {
   const ref = useRef<THREE.Mesh>(null!);
   const mode = useScene((s) => s.mode);
   const sketching = useScene((s) => s.tool === 'sketch');
@@ -18,10 +52,9 @@ function ObjectMesh({ obj, selected }: { obj: CadObject; selected: boolean }) {
   const select = useScene((s) => s.select);
   const updateObject = useScene((s) => s.updateObject);
 
-  const geometry = useMemo(
-    () => buildGeometry(obj.type, obj.params, obj.profile),
-    [obj.type, obj.params, obj.profile],
-  );
+  const selection = useScene((s) => s.selection);
+  // Rebuilds only when this object (or one of its boolean parts) changed
+  const geometry = useMemo(() => buildObjectGeometry(obj), [obj]);
   useEffect(() => () => geometry.dispose(), [geometry]);
 
   const commitTransform = () => {
@@ -49,19 +82,33 @@ function ObjectMesh({ obj, selected }: { obj: CadObject; selected: boolean }) {
           ? undefined
           : (e) => {
               e.stopPropagation();
-              select(obj.id);
+              select(obj.id, e.nativeEvent.ctrlKey || e.nativeEvent.shiftKey || e.nativeEvent.metaKey);
             }
       }
     >
       <meshStandardMaterial color={obj.color} metalness={0.1} roughness={0.6} />
-      <Edges threshold={20} color={selected ? '#ff9f1c' : '#1b1f24'} />
+      <FeatureEdges geometry={geometry} color={selected ? '#ff9f1c' : '#1b1f24'} />
     </mesh>
   );
 
-  if (!selected || !obj.visible || sketching) return mesh;
+  const ghosts = showParts && obj.children && (
+    <group position={obj.position} rotation={obj.rotation} scale={obj.scale}>
+      {obj.children.map((c) => (
+        <PartGhost key={c.id} obj={c} highlight={selection.includes(c.id)} />
+      ))}
+    </group>
+  );
+
+  if (!primary || !obj.visible || sketching) return (
+    <>
+      {mesh}
+      {ghosts}
+    </>
+  );
   return (
     <>
       {mesh}
+      {ghosts}
       <TransformControls
         object={ref}
         mode={mode}
@@ -156,7 +203,7 @@ function SketchLayer() {
 
 export default function Viewport() {
   const objects = useScene((s) => s.objects);
-  const selectedId = useScene((s) => s.selectedId);
+  const selection = useScene((s) => s.selection);
   const unit = useScene((s) => s.unit);
   const sketching = useScene((s) => s.tool === 'sketch');
   const select = useScene((s) => s.select);
@@ -193,7 +240,13 @@ export default function Viewport() {
       <axesHelper args={[grid.section]} />
 
       {objects.map((o) => (
-        <ObjectMesh key={o.id} obj={o} selected={o.id === selectedId} />
+        <ObjectMesh
+          key={o.id}
+          obj={o}
+          selected={selection.includes(o.id)}
+          primary={selection[0] === o.id}
+          showParts={!!o.children && (selection.includes(o.id) || o.children.some((c) => selection.includes(c.id)))}
+        />
       ))}
       {sketching && <SketchLayer />}
 

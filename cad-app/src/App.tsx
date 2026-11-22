@@ -6,7 +6,7 @@ import Viewport from './components/Viewport';
 import CommandLine from './components/CommandLine';
 import { useScene } from './store/sceneStore';
 import { newProject, openProject, saveProject } from './io/files';
-import { toDisplay } from './units';
+import { toDisplay, type Unit } from './units';
 
 function useShortcuts() {
   useEffect(() => {
@@ -58,7 +58,7 @@ function useShortcuts() {
       else if (k === 'r') s.setMode('scale');
       else if (k === 's') s.setTool('sketch');
       else if (k === 'escape') s.select(null);
-      else if ((k === 'delete' || k === 'backspace') && s.selectedId) s.removeObject(s.selectedId);
+      else if (k === 'delete' || k === 'backspace') s.removeSelected();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -89,9 +89,22 @@ function StatusBar() {
   return (
     <footer className="status">
       <span>{count} object{count === 1 ? '' : 's'}</span>
-      <span>Unit: {unit}</span>
+      <label className="status-unit">
+        Unit
+        <select value={unit} onChange={(e) => useScene.getState().setUnit(e.target.value as Unit)}>
+          <option value="mm">mm</option>
+          <option value="cm">cm</option>
+          <option value="m">m</option>
+        </select>
+      </label>
+      <button
+        className={`status-btn ${snap.enabled ? 'active' : ''}`}
+        onClick={() => useScene.getState().setSnap({ enabled: !snap.enabled })}
+        title="Toggle snap (F9). Change the step with: SNAP <value>"
+      >
+        Snap {snap.enabled ? `${d(snap.step)} ${unit} / ${snap.angle}°` : 'off'}
+      </button>
       <span>{tool === 'sketch' ? 'Tool: sketch' : `Tool: ${mode}`}</span>
-      <span>Snap: {snap.enabled ? `${d(snap.step)} ${unit} / ${snap.angle}°` : 'off'}</span>
       {sketchInfo && <span className="coords">{sketchInfo}</span>}
       <span className="hint">
         {tool === 'sketch'

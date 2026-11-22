@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
 import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js';
 import type { CadObject } from '../store/sceneStore';
-import { buildGeometry } from '../tools/primitives';
+import { buildObjectGeometry } from '../tools/geometry';
 
 /** Export visible objects in mm, Z-up (what slicers and most CAD tools expect). */
 export function exportMesh(objects: CadObject[], kind: 'stl' | 'obj'): string | Uint8Array {
@@ -11,7 +11,7 @@ export function exportMesh(objects: CadObject[], kind: 'stl' | 'obj'): string | 
 
   for (const o of objects) {
     if (!o.visible) continue;
-    const g = buildGeometry(o.type, o.params, o.profile);
+    const g = buildObjectGeometry(o);
     geometries.push(g);
     const m = new THREE.Mesh(g);
     m.name = o.name.replace(/\s+/g, '_');
