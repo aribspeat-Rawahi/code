@@ -7,7 +7,7 @@ let mainWindow: BrowserWindow | null = null;
 
 type FileKind = 'project' | 'stl' | 'obj' | 'dxf';
 const FILE_KINDS: Record<FileKind, Electron.FileFilter> = {
-  project: { name: 'Nirman CAD project', extensions: ['ncad'] },
+  project: { name: 'RS CAD 3D project', extensions: ['rscad'] },
   stl: { name: 'STL mesh', extensions: ['stl'] },
   obj: { name: 'Wavefront OBJ', extensions: ['obj'] },
   dxf: { name: 'DXF drawing', extensions: ['dxf'] },
@@ -49,7 +49,7 @@ ipcMain.handle('file:open-project', async (e) => {
   const win = assertTrusted(e);
   const res = await dialog.showOpenDialog(win, {
     properties: ['openFile'],
-    filters: [{ name: 'Nirman CAD project', extensions: ['ncad', 'json'] }],
+    filters: [{ name: 'RS CAD 3D project', extensions: ['rscad', 'ncad', 'json'] }],
   });
   const file = res.filePaths[0];
   if (res.canceled || !file) return null;
@@ -65,7 +65,7 @@ function createWindow(): void {
     minWidth: 1000,
     minHeight: 640,
     backgroundColor: '#1b1f24',
-    title: 'Nirman CAD',
+    title: 'RS CAD 3D',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

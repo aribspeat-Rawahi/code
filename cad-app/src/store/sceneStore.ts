@@ -348,7 +348,7 @@ export const useScene = create<SceneState>((set, get) => ({
   view: { name: null, ortho: false, seq: 0, fitSeq: 0 },
   layers: [DEFAULT_LAYER],
   currentLayer: '0',
-  log: ['Nirman CAD ready. Type HELP for commands.'],
+  log: ['RS CAD 3D ready. Type HELP for commands.'],
   past: [],
   future: [],
 

@@ -3,7 +3,8 @@ import { BOOLEAN_OPS, DEFAULT_PARAMS, OBJECT_TYPES, type BooleanOp, type ObjectT
 import type { Pt } from '../tools/sketch';
 import type { Unit } from '../units';
 
-const FORMAT = 'nirman-cad';
+const FORMAT = 'rs-cad-3d';
+const LEGACY_FORMATS = ['nirman-cad']; // projects saved before the rename
 const VERSION = 1;
 const MAX_OBJECTS = 100_000;
 const MAX_PROFILE_POINTS = 10_000;
@@ -120,7 +121,7 @@ export function parseProject(text: string): { unit: Unit; objects: CadObject[]; 
     throw new Error('File is not valid JSON.');
   }
   const d = data as Record<string, unknown>;
-  if (!d || d.format !== FORMAT) throw new Error('Not a Nirman CAD project file.');
+  if (!d || (d.format !== FORMAT && !LEGACY_FORMATS.includes(d.format as string))) throw new Error('Not an RS CAD 3D project file.');
   if (!isNum(d.version) || d.version > VERSION) throw new Error('Project was saved by a newer version.');
   if (!Array.isArray(d.objects)) throw new Error('Project has no object list.');
   if (d.objects.length > MAX_OBJECTS) throw new Error('Project has too many objects.');

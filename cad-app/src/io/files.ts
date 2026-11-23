@@ -4,7 +4,7 @@ import { buildDxf, type DxfView } from '../tools/dxf';
 import { parseProject, serializeProject } from './project';
 
 type Kind = 'project' | 'stl' | 'obj' | 'dxf';
-const EXT: Record<Kind, string> = { project: 'ncad', stl: 'stl', obj: 'obj', dxf: 'dxf' };
+const EXT: Record<Kind, string> = { project: 'rscad', stl: 'stl', obj: 'obj', dxf: 'dxf' };
 const MIME: Record<Kind, string> = { project: 'application/json', stl: 'model/stl', obj: 'text/plain', dxf: 'application/dxf' };
 
 const baseName = (p: string) => p.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, '');
@@ -32,7 +32,7 @@ async function openText(): Promise<{ name: string; text: string } | null> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.ncad,.json';
+    input.accept = '.rscad,.ncad,.json';
     input.onchange = async () => {
       const f = input.files?.[0];
       resolve(f ? { name: f.name, text: await f.text() } : null);

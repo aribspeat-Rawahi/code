@@ -1,5 +1,5 @@
-appId: com.nirmancad.app
-productName: Nirman CAD
+appId: com.rscad3d.app
+productName: RS CAD 3D
 directories:
   output: release
 files:
@@ -9,7 +9,7 @@ files:
 win:
   target:
     - nsis
-  artifactName: NirmanCAD-Setup-${version}.${ext}
+  artifactName: RS-CAD-3D-Setup-${version}.${ext}
 nsis:
   oneClick: false
   perMachine: false

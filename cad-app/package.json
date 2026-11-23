@@ -1,8 +1,8 @@
 {
-  "name": "nirman-cad",
+  "name": "rs-cad-3d",
   "version": "0.1.0",
-  "description": "Nirman CAD - 3D CAD for architecture and mechanical design",
-  "author": "Nirman CAD",
+  "description": "RS CAD 3D - 3D CAD for architecture and mechanical design",
+  "author": "RS CAD 3D",
   "private": true,
   "main": "dist-electron/main.js",
   "scripts": {

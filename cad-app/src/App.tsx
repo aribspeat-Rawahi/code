@@ -208,7 +208,7 @@ export default function App() {
   useShortcuts();
   const projectName = useScene((s) => s.projectName);
   useEffect(() => {
-    document.title = `${projectName} - Nirman CAD`;
+    document.title = `${projectName} - RS CAD 3D`;
   }, [projectName]);
 
   return (

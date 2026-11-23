@@ -1,4 +1,4 @@
-# Nirman CAD
+# RS CAD 3D
 
 3D CAD desktop app for architecture/building and mechanical design.
 Electron + React + Three.js. Internal unit: millimetres, Z-up.

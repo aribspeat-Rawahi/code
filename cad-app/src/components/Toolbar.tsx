@@ -69,7 +69,7 @@ export default function Toolbar() {
   return (
     <header className="toolbar">
       <span className="brand" title={`Project: ${projectName}`}>
-        Nirman CAD
+        RS CAD 3D
       </span>
 
       <FileMenu />
