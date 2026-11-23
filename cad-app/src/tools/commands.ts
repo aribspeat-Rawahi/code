@@ -1,5 +1,6 @@
 import { useScene, type CadObject, type Vec3 } from '../store/sceneStore';
 import { findObject, flatten } from '../store/tree';
+import { SNAP_LABEL, type SnapKind } from './snap';
 import { exportDxf, exportModel, newProject, openProject, saveProject } from '../io/files';
 import { DEG2RAD, fromDisplay, toDisplay, type Unit } from '../units';
 import { wallPoints, profileFromPoints, type Pt } from './sketch';
@@ -14,7 +15,7 @@ const HELP = [
   'MOVE dx dy dz   MOVETO x y z   ROTATE deg [X|Y|Z]   COPY [dx dy dz]   DEL   SELECT name   LIST',
   'UNION  SUBTRACT  INTERSECT  (on the selection; first selected = base)   EXPLODE',
   'SELECT name[, name2, ...]  selects several, in order (e.g. SELECT Wall 1, Box 1)',
-  'OSNAP on|off  (object snap, F3)',
+  'OSNAP on|off  (object snap, F3)   OSNAP end|mid|cen|int|near on|off   OSNAP = list modes',
   'LAYER NEW|SET|ON|OFF|LOCK|UNLOCK|DEL name   LAYER LIST   CHLAYER name (move selection to a layer)',
   'VIEW top|front|right|left|back|iso (keys 1-5, 0)   ORTHO   PERSP (P)   ZOOM / FIT (F) = zoom extents',
   'DIST (pick 2 points) or DIST x1 y1 x2 y2 / x1 y1 z1 x2 y2 z2     DIM (pick a, b, then line position)',
@@ -400,10 +401,25 @@ export async function runCommand(raw: string): Promise<void> {
     }
 
     case 'OSNAP': {
+      const s = st();
+      const MODE: Record<string, SnapKind> = { end: 'end', mid: 'mid', cen: 'center', center: 'center', int: 'int', near: 'near', nea: 'near' };
       const a = args[0]?.toLowerCase();
-      if (a !== 'on' && a !== 'off') return print('Usage: OSNAP on|off');
-      st().setSnap({ object: a === 'on' });
-      return print(`Object snap ${a}`);
+      const b = args[1]?.toLowerCase();
+      if (!a) {
+        return print(
+          `Object snap ${s.snap.object ? 'on' : 'off'}: ` +
+            (Object.keys(SNAP_LABEL) as SnapKind[]).map((k) => `${SNAP_LABEL[k]} ${s.snap.modes[k] ? 'on' : 'off'}`).join(', '),
+        );
+      }
+      if (a === 'on' || a === 'off') {
+        s.setSnap({ object: a === 'on' });
+        return print(`Object snap ${a}`);
+      }
+      if (MODE[a] && (b === 'on' || b === 'off')) {
+        s.setSnap({ object: true, modes: { ...s.snap.modes, [MODE[a]]: b === 'on' } });
+        return print(`${SNAP_LABEL[MODE[a]]} snap ${b}`);
+      }
+      return print('Usage: OSNAP on|off   or   OSNAP end|mid|cen|int|near on|off   or   OSNAP (list)');
     }
     case 'SNAP': {
       const a = args[0]?.toLowerCase();

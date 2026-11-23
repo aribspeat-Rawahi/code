@@ -5,6 +5,7 @@ import PropertiesPanel from './components/PropertiesPanel';
 import Viewport from './components/Viewport';
 import CommandLine from './components/CommandLine';
 import ViewBar from './components/ViewBar';
+import OsnapMenu from './components/OsnapMenu';
 import { isFlatView, useScene } from './store/sceneStore';
 import { newProject, openProject, saveProject } from './io/files';
 import { toDisplay, type Unit } from './units';
@@ -172,13 +173,7 @@ function StatusBar() {
       >
         Snap {snap.enabled ? `${d(snap.step)} ${unit} / ${snap.angle}°` : 'off'}
       </button>
-      <button
-        className={`status-btn ${snap.object ? 'active' : ''}`}
-        onClick={() => useScene.getState().setSnap({ object: !snap.object })}
-        title="Object snap: corners, midpoints and centres (F3)"
-      >
-        OSnap {snap.object ? 'on' : 'off'}
-      </button>
+      <OsnapMenu />
       {currentLayer && (
         <span title="Current layer: new objects go here">
           <span className="swatch" style={{ background: currentLayer.color, display: 'inline-block', marginRight: 4 }} />

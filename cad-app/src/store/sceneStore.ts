@@ -11,7 +11,7 @@ import {
 import { profileFromPoints, type Pt } from '../tools/sketch';
 import { buildObjectGeometry, matrixOf } from '../tools/geometry';
 import { toDisplay, type Unit } from '../units';
-import type { SnapKind } from '../tools/snap';
+import { ALL_SNAP_MODES, type SnapKind, type SnapModes } from '../tools/snap';
 import { findObject, flatten, removeIn, updateIn } from './tree';
 
 export type Vec3 = [number, number, number];
@@ -82,7 +82,8 @@ export interface SnapSettings {
   enabled: boolean;
   step: number; // mm
   angle: number; // degrees
-  object: boolean; // snap to object corners, midpoints and centres
+  object: boolean; // object snap master switch
+  modes: SnapModes; // which object snaps are on
 }
 
 export interface PickInfo {
@@ -237,7 +238,7 @@ export const useScene = create<SceneState>((set, get) => ({
   mode: 'translate',
   tool: 'select',
   unit: 'mm',
-  snap: { enabled: true, step: 10, angle: 15, object: true },
+  snap: { enabled: true, step: 10, angle: 15, object: true, modes: ALL_SNAP_MODES },
   extrudeHeight: 100,
   sketchPoints: [],
   cursor: null,

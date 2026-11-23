@@ -28,7 +28,7 @@ function FeatureEdges({ geometry, color }: { geometry: THREE.BufferGeometry; col
   );
 }
 import { samePt, snapValue, type Pt } from '../tools/sketch';
-import { collectSnapPoints, findSnap, SNAP_COLOR } from '../tools/snap';
+import { collectSnapData, findSnap, SNAP_COLOR, type SnapData } from '../tools/snap';
 import { DEG2RAD, toDisplay } from '../units';
 
 // Clicking a gizmo handle also fires the canvas "missed" event; ignore it briefly after a drag.
@@ -157,7 +157,8 @@ function useSnapPoints(exclude?: string[]) {
   const enabled = useScene((s) => s.snap.object);
   const key = exclude?.join(',') ?? '';
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useMemo(() => (enabled ? collectSnapPoints(objects, new Set(exclude)) : []), [objects, enabled, key]);
+  const empty: SnapData = useMemo(() => ({ points: [], edges: [] }), []);
+  return useMemo(() => (enabled ? collectSnapData(objects, new Set(exclude)) : empty), [objects, enabled, key, empty]);
 }
 
 /** Coloured marker on the snapped point: green = endpoint, blue = midpoint, pink = centre. */
@@ -244,7 +245,7 @@ function SketchLayer() {
     }
 
     // 2. Object snap: corners / midpoints / centres, projected onto the ground
-    const hit = findSnap(snapPoints, e.pointer, camera, size);
+    const hit = findSnap(snapPoints, e.pointer, camera, size, useScene.getState().snap.modes);
     if (hit) {
       s.setPick({ point: [hit.p.x, hit.p.y, hit.p.z], kind: hit.kind });
       return [hit.p.x, hit.p.y];
@@ -415,7 +416,7 @@ function PickLayer() {
 
   const resolve = (e: ThreeEvent<PointerEvent | MouseEvent>): Vec3 => {
     const s = useScene.getState();
-    const hit = findSnap(snapPoints, e.pointer, camera, size);
+    const hit = findSnap(snapPoints, e.pointer, camera, size, useScene.getState().snap.modes);
     let p: Vec3;
     if (hit) {
       p = [hit.p.x, hit.p.y, hit.p.z];

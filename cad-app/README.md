@@ -34,7 +34,10 @@ Hide a part (eye icon) to suppress that cut. `EXPLODE` splits a boolean back int
 Tip: `SELECT Wall 1, Door 1` then `SUBTRACT` cuts a door opening.
 
 ## Object snap & Move by points
-- Object snap (OSnap, `F3`): green = Endpoint (corner), blue = Midpoint (edge middle), pink = Center (axis/hole centre, object centre).
+- Object snap (OSnap, `F3`): green = Endpoint (corner), blue = Midpoint (edge middle), pink = Center (axis/hole centre, object centre),
+  amber = Intersection (two edges cross — apparent intersection in Top/Front/Side views, true 3D crossing in perspective),
+  violet = Nearest (closest point on an edge; used when no other snap is within reach).
+- Turn modes on/off from **OSnap ▾** in the status bar, or `OSNAP end|mid|cen|int|near on|off`; `OSNAP` lists them.
 - Works in Sketch (draw along existing walls) and in **Move ⇢** (`M`, or `MOVE` with no arguments):
   select objects → click a base point → click the target point. You can also type `x y z` or `@dx dy dz`.
 - Example: select a door box, `M`, click its bottom corner, click the wall corner — it lands exactly there.
