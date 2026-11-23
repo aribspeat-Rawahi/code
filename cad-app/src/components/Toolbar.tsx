@@ -124,6 +124,14 @@ export default function Toolbar() {
           Copy ⇢
         </button>
         <button
+          className={tool === 'pickmirror' ? 'active' : ''}
+          onClick={() => (tool === 'pickmirror' ? useScene.getState().setTool('select') : useScene.getState().startPickTool('pickmirror'))}
+          disabled={!selectedId && tool !== 'pickmirror'}
+          title="Mirror: pick two points on the mirror line; keeps the originals (X). MIRROR ERASE replaces them."
+        >
+          Mirror
+        </button>
+        <button
           onClick={() => useScene.getState().openArray()}
           disabled={!selectedId}
           title="Array: rectangular grid or polar (circular) pattern of the selection (A)"
@@ -153,9 +161,9 @@ export default function Toolbar() {
             if (n) useScene.getState().print(`Added ${n} dimensions.`);
           }}
           disabled={!selectedId}
-          title="Width, depth and height dimensions of the selected object"
+          title="Auto dimension: width, depth and height of the selected object"
         >
-          Auto dim
+          Auto
         </button>
       </div>
 

@@ -1,6 +1,8 @@
 import { useScene, type CadObject, type Vec3 } from '../store/sceneStore';
 import { findObject, flatten } from '../store/tree';
+import * as THREE from 'three';
 import { SNAP_LABEL, type SnapKind } from './snap';
+import { reflectionMatrix } from './mirror';
 import { exportDxf, exportModel, newProject, openProject, saveProject } from '../io/files';
 import { DEG2RAD, fromDisplay, toDisplay, type Unit } from '../units';
 import { wallPoints, profileFromPoints, type Pt } from './sketch';
@@ -11,6 +13,7 @@ const HELP = [
   'WALL x1 y1 x2 y2 [thickness] [height]     POLY h x1 y1 x2 y2 x3 y3 ...',
   'SKETCH  then click points, or type  x y  /  @dx dy ;  Enter or CLOSE to extrude, CANCEL to stop',
   'HEIGHT h  (extrude height for sketches)',
+  'MIRROR [ERASE] = pick the mirror line   MIRROR X|Y|Z [c] [ERASE] = mirror across x=c / y=c / z=c',
   'COPY (no args) = copy by points, click for each copy   COPY dx dy [dz]',
   'ARRAY = panel with preview   ARRAY RECT cols rows dx dy [levels dz]   ARRAY POLAR count [angle] [cx cy] [norotate]',
   'MOVE (no args) = move by points: pick base point, then target (snaps to corners/midpoints/centres)',
@@ -159,7 +162,7 @@ export async function runCommand(raw: string): Promise<void> {
     case 'P':
     case '@': {
       const t = st().tool;
-      if (t === 'pickmove' || t === 'pickcopy' || t === 'measure' || t === 'dimension' || t === 'arraycenter') {
+      if (t === 'pickmove' || t === 'pickcopy' || t === 'pickmirror' || t === 'measure' || t === 'dimension' || t === 'arraycenter') {
         const v = nums(2, 3, cmd === 'P' ? 'x y [z]' : '@dx dy [dz]');
         if (!v) return;
         const last = st().pickPoints.at(-1);
@@ -236,6 +239,25 @@ export async function runCommand(raw: string): Promise<void> {
       const d: Vec3 = [L(v[0]), L(v[1]), L(v[2] ?? 0)];
       const n = st().copySelection(() => [{ t: d, rz: 0 }]);
       return print(n ? `Copied ${n} object(s).` : 'Error: select object(s) to copy first.');
+    }
+    case 'MIRROR':
+    case 'MI': {
+      // MIRROR [ERASE]            -> pick the mirror line
+      // MIRROR X|Y|Z [c] [ERASE]  -> mirror across the plane x=c / y=c / z=c
+      const s = st();
+      const erase = args.some((a) => a.toUpperCase() === 'ERASE');
+      const rest = args.filter((a) => a.toUpperCase() !== 'ERASE');
+      const axis = rest[0]?.toUpperCase();
+      if (!axis) {
+        if (s.startPickTool('pickmirror')) s.setMirrorErase(erase);
+        return;
+      }
+      if (!['X', 'Y', 'Z'].includes(axis)) return print('Usage: MIRROR [ERASE]   or   MIRROR X|Y|Z [c] [ERASE]');
+      const c = rest[1] !== undefined ? Number(rest[1]) : 0;
+      if (!Number.isFinite(c)) return print('Usage: MIRROR X|Y|Z [c] [ERASE]');
+      const normal = new THREE.Vector3(axis === 'X' ? 1 : 0, axis === 'Y' ? 1 : 0, axis === 'Z' ? 1 : 0);
+      const n = s.mirrorSelection(reflectionMatrix(normal.clone().multiplyScalar(L(c)), normal), erase);
+      return print(n ? `Mirrored ${n} object(s) across ${axis.toLowerCase()} = ${c} ${unit}${erase ? ' (originals replaced)' : ''}.` : 'Error: select object(s) to mirror first.');
     }
     case 'ARRAY':
     case 'AR': {

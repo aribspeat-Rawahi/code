@@ -53,7 +53,7 @@ function useShortcuts() {
         return;
       }
 
-      if (s.tool === 'pickmove' || s.tool === 'pickcopy' || s.tool === 'measure' || s.tool === 'dimension' || s.tool === 'arraycenter') {
+      if (s.tool === 'pickmove' || s.tool === 'pickcopy' || s.tool === 'pickmirror' || s.tool === 'measure' || s.tool === 'dimension' || s.tool === 'arraycenter') {
         if (k === 'escape') {
           if (s.pickPoints.length && (s.tool === 'measure' || s.tool === 'dimension')) useScene.setState({ pickPoints: [] });
           else {
@@ -102,6 +102,7 @@ function useShortcuts() {
       else if (k === 's') s.setTool('sketch');
       else if (k === 'm') s.startPickTool('pickmove');
       else if (k === 'c') s.startPickTool('pickcopy');
+      else if (k === 'x') s.startPickTool('pickmirror');
       else if (k === 'a') s.openArray();
       else if (k === 'escape' && s.arrayDraft) s.closeArray();
       else if (k === 'q') s.startPickTool('measure');
@@ -141,7 +142,7 @@ function StatusBar() {
     }
   }
 
-  if ((tool === 'pickmove' || tool === 'pickcopy' || tool === 'measure' || tool === 'dimension' || tool === 'arraycenter') && pick) {
+  if ((tool === 'pickmove' || tool === 'pickcopy' || tool === 'pickmirror' || tool === 'measure' || tool === 'dimension' || tool === 'arraycenter') && pick) {
     const [x, y, z] = pick.point.map(d);
     sketchInfo = `X ${x}  Y ${y}  Z ${z}`;
     if (base) {
@@ -154,6 +155,7 @@ function StatusBar() {
     sketch: 'Click points · Shift = 90° · click first point or Enter to close · Backspace undo point · Esc cancel',
     pickmove: base ? 'Click the target point · Esc cancel' : 'Click the base point on the object · Esc cancel',
     pickcopy: base ? 'Click each place for a copy · Esc to finish' : 'Click the base point on the object · Esc cancel',
+    pickmirror: base ? 'Click the second point of the mirror line · Esc cancel' : 'Click the first point of the mirror line · Esc cancel',
     arraycenter: 'Click the array centre (snap to a Center) · Esc cancel',
     measure: base ? 'Click the second point · Esc restart' : 'Click the first point · Esc to finish',
     dimension: 'Click point 1, point 2, then where the dimension line goes · Esc to finish',
@@ -190,7 +192,7 @@ function StatusBar() {
       <span>
         View: {view.name ?? 'free'} · {view.ortho ? 'ortho' : 'persp'}
       </span>
-      <span>Tool: {tool === 'select' ? mode : { sketch: 'sketch', pickmove: 'move by points', pickcopy: 'copy', measure: 'measure', dimension: 'dimension', arraycenter: 'array centre' }[tool]}</span>
+      <span>Tool: {tool === 'select' ? mode : { sketch: 'sketch', pickmove: 'move by points', pickcopy: 'copy', pickmirror: 'mirror', measure: 'measure', dimension: 'dimension', arraycenter: 'array centre' }[tool]}</span>
       {pick?.kind && (
         <span className="snap-kind" style={{ color: SNAP_COLOR[pick.kind] }}>
           ● {SNAP_LABEL[pick.kind]}

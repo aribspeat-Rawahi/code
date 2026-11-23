@@ -81,3 +81,9 @@ Layers panel (bottom-left): `+ Layer`, click a name to make it **current** (new 
   - Polar: count, sweep angle, centre (type it or **Pick centre in view** and snap to a Center), optional rotation —
     e.g. a 6-hole bolt circle around the origin: `ARRAY POLAR 6 360 0 0`, then select the plate + holes → Subtract.
 - Copies are independent objects (up to 2000 per array) on the source's layer; locked layers and dimensions are skipped.
+
+## Mirror
+**Mirror** (`X`, or `MIRROR`): select objects, click two points on the mirror line (object snap works) — a mirrored copy is added;
+the preview follows the second point. The mirror is perpendicular to the current view plane (plan: a vertical mirror).
+- `MIRROR ERASE` replaces the originals instead of copying. `MIRROR X|Y|Z [c] [ERASE]` mirrors across the plane x=c / y=c / z=c.
+- True reflection: sketched profiles flip, boolean parts flip with their parent, dimensions are mirrored too.

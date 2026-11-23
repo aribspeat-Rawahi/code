@@ -11,14 +11,15 @@ import {
 import { profileFromPoints, type Pt } from '../tools/sketch';
 import { buildObjectGeometry, matrixOf } from '../tools/geometry';
 import { sceneBounds } from '../tools/bounds';
+import { mirrorObject, reflectionMatrix } from '../tools/mirror';
 import { toDisplay, type Unit } from '../units';
 import { ALL_SNAP_MODES, type SnapKind, type SnapModes } from '../tools/snap';
 import { findObject, flatten, removeIn, updateIn } from './tree';
 
 export type Vec3 = [number, number, number];
 export type TransformMode = 'translate' | 'rotate' | 'scale';
-export type Tool = 'select' | 'sketch' | 'pickmove' | 'pickcopy' | 'measure' | 'dimension' | 'arraycenter';
-export type PickTool = 'pickmove' | 'pickcopy' | 'measure' | 'dimension' | 'arraycenter';
+export type Tool = 'select' | 'sketch' | 'pickmove' | 'pickcopy' | 'pickmirror' | 'measure' | 'dimension' | 'arraycenter';
+export type PickTool = 'pickmove' | 'pickcopy' | 'pickmirror' | 'measure' | 'dimension' | 'arraycenter';
 
 /** Array settings; lengths in mm, angle in degrees. */
 export interface ArrayParams {
@@ -178,6 +179,8 @@ interface SceneState {
   pickPoints: Vec3[];
   /** Array panel settings; null while the panel is closed. */
   arrayDraft: ArrayParams | null;
+  /** Mirror replaces the originals instead of adding copies. */
+  mirrorErase: boolean;
   projectName: string;
   view: ViewState;
   layers: Layer[];
@@ -210,6 +213,8 @@ interface SceneState {
   addPickPoint: (p: Vec3) => void;
   addDimension: (a: Vec3, b: Vec3, offset?: Vec3) => string | null;
   copySelection: (placements: (o: CadObject) => Placement[]) => number;
+  mirrorSelection: (R: THREE.Matrix4, erase?: boolean) => number;
+  setMirrorErase: (erase: boolean) => void;
   openArray: (kind?: ArrayParams['kind']) => boolean;
   updateArray: (patch: Partial<ArrayParams>) => void;
   closeArray: () => void;
@@ -283,6 +288,7 @@ function cloneWithNewIds(o: CadObject): CadObject {
 }
 
 const PICK_HELP: Record<PickTool, string> = {
+  pickmirror: 'Mirror: click two points on the mirror line (in the current view plane). Or type x y z. Esc cancels.',
   pickcopy: 'Copy: click the base point (e.g. a corner), then each place for a copy. Or type x y z / @dx dy dz. Esc ends.',
   arraycenter: 'Array: click the centre point (object snap works, e.g. Center of a plate). Esc cancels.',
   pickmove: 'Move: click the base point (e.g. a corner of the object), then the target point. Or type x y z / @dx dy dz. Esc cancels.',
@@ -307,6 +313,19 @@ export function dimOffset(a: Vec3, b: Vec3, c: Vec3 | null): Vec3 {
   return side.multiplyScalar(Math.max(len * 0.15, 1)).toArray() as Vec3;
 }
 
+/**
+ * Reflection across the plane that contains the line a→b and the work plane's normal
+ * (plan: a vertical mirror; front/side views: a mirror seen edge-on in that elevation).
+ */
+export function mirrorLineMatrix(a: Vec3, b: Vec3, plane: WorkPlane): THREE.Matrix4 | null {
+  const A = new THREE.Vector3(...a);
+  const dir = new THREE.Vector3(...b).sub(A);
+  const up = plane === 'xy' ? new THREE.Vector3(0, 0, 1) : plane === 'xz' ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+  dir.addScaledVector(up, -dir.dot(up)); // only the in-plane direction matters
+  if (dir.lengthSq() < 1e-12) return null;
+  return reflectionMatrix(A, new THREE.Vector3().crossVectors(dir, up).normalize());
+}
+
 const DEFAULT_HEIGHT: Record<Unit, number> = { mm: 100, cm: 100, m: 3000 };
 const DEFAULT_STEP: Record<Unit, number> = { mm: 10, cm: 10, m: 100 };
 
@@ -324,6 +343,7 @@ export const useScene = create<SceneState>((set, get) => ({
   pick: null,
   pickPoints: [],
   arrayDraft: null,
+  mirrorErase: false,
   projectName: 'untitled',
   view: { name: null, ortho: false, seq: 0, fitSeq: 0 },
   layers: [DEFAULT_LAYER],
@@ -515,8 +535,8 @@ export const useScene = create<SceneState>((set, get) => ({
 
   startPickTool: (tool) => {
     const s = get();
-    if ((tool === 'pickmove' || tool === 'pickcopy') && !s.selection.some((id) => s.objects.some((o) => o.id === id))) {
-      s.print(`Error: select the object(s) to ${tool === 'pickmove' ? 'move' : 'copy'} first.`);
+    if ((tool === 'pickmove' || tool === 'pickcopy' || tool === 'pickmirror') && !s.selection.some((id) => s.objects.some((o) => o.id === id))) {
+      s.print(`Error: select the object(s) to ${tool === 'pickmove' ? 'move' : tool === 'pickcopy' ? 'copy' : 'mirror'} first.`);
       return false;
     }
     set({ tool, pickPoints: [], pick: null, sketchPoints: [], cursor: null });
@@ -554,6 +574,22 @@ export const useScene = create<SceneState>((set, get) => ({
       const n = s.copySelection(() => [{ t: d, rz: 0 }]);
       set({ pickPoints: [base] }); // keep the base: every further click places another copy
       return s.print(`Copied ${n} object(s) by ${d.map(r).join(', ')} ${s.unit}. Click again for another copy, Esc to finish.`);
+    }
+
+    if (s.tool === 'pickmirror') {
+      if (pts.length < 2) {
+        set({ pickPoints: pts });
+        return s.print('First point of the mirror line set. Now the second point.');
+      }
+      const [a, b] = pts;
+      const R = mirrorLineMatrix(a, b, workPlaneOf(s.view));
+      if (!R) {
+        set({ pickPoints: [a] });
+        return s.print('Error: the two points are the same. Pick a different second point.');
+      }
+      const n = s.mirrorSelection(R, s.mirrorErase);
+      set({ tool: 'select', pickPoints: [], pick: null, mirrorErase: false });
+      return s.print(n ? `Mirrored ${n} object(s)${s.mirrorErase ? ' (originals replaced)' : ''}.` : 'Nothing to mirror (locked layer?).');
     }
 
     if (s.tool === 'arraycenter') {
@@ -635,6 +671,29 @@ export const useScene = create<SceneState>((set, get) => ({
     set({ ...withHistory(s), objects: [...s.objects, ...copies] });
     return copies.length;
   },
+
+  mirrorSelection: (R, erase = false) => {
+    const s = get();
+    const sources = s.objects.filter((o) => s.selection.includes(o.id) && !layerOf(s.layers, o).locked);
+    if (!sources.length) return 0;
+    if (erase) {
+      // Replace in place: same ids and names, so the selection and tree stay put
+      const mirrored = new Map(sources.map((o) => [o.id, mirrorObject(o, R)]));
+      set({ ...withHistory(s), objects: s.objects.map((o) => mirrored.get(o.id) ?? o) });
+      return sources.length;
+    }
+    const all = [...s.objects];
+    const copies = sources.map((o) => {
+      const c = { ...mirrorObject(cloneWithNewIds(o), R) };
+      const label = o.name.replace(/\s+\d+$/, '').replace(/ copy$/, '');
+      c.name = nextName(all, label || OBJECT_LABEL[o.type]);
+      all.push(c);
+      return c;
+    });
+    set({ ...withHistory(s), objects: [...s.objects, ...copies], ...sel(copies.map((c) => c.id)) });
+    return copies.length;
+  },
+  setMirrorErase: (mirrorErase) => set({ mirrorErase }),
 
   openArray: (kind = 'rect') => {
     const s = get();

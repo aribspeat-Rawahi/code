@@ -47,6 +47,8 @@ export default function CommandLine() {
               ? picked ? 'Target (x y z / @dx dy dz):' : 'Base point (x y z):'
               : tool === 'arraycenter'
                 ? 'Array centre (x y):'
+                : tool === 'pickmirror'
+                  ? `Mirror line point ${picked + 1} (x y z):`
               : tool === 'measure' || tool === 'dimension'
                 ? `Point ${picked + 1} (x y z / @dx dy dz):`
                 : 'Command:'}

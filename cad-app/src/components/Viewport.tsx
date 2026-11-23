@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import {
   arrayPlacements,
   dimOffset,
+  mirrorLineMatrix,
   isFlatView,
   shownObjects,
   useScene,
@@ -397,6 +398,32 @@ function DimensionView({ obj, selected }: { obj: CadObject; selected: boolean })
   );
 }
 
+/** Reflected ghosts: the untouched objects inside a group whose matrix is the reflection. */
+function MirrorPreview({ a, b, plane, objects }: { a: Vec3; b: Vec3; plane: WorkPlane; objects: CadObject[] }) {
+  const R = useMemo(() => mirrorLineMatrix(a, b, plane), [a, b, plane]);
+  // Extend the mirror line well past both points so it reads as an axis
+  const line = useMemo(() => {
+    const A = new THREE.Vector3(...a);
+    const d = new THREE.Vector3(...b).sub(A);
+    const len = d.length();
+    if (len < 1e-9) return null;
+    d.normalize();
+    return [A.clone().addScaledVector(d, -len), A.clone().addScaledVector(d, len * 2)].map((v) => v.toArray() as Vec3);
+  }, [a, b]);
+  if (!R) return null;
+  return (
+    <>
+      {/* three.js flips face winding itself for a negative-determinant matrix */}
+      <group matrix={R} matrixAutoUpdate={false}>
+        {objects.map((o) =>
+          o.type === 'dimension' ? null : <PartGhost key={o.id} obj={o} highlight />,
+        )}
+      </group>
+      {line && <Line points={line} color="#f472b6" lineWidth={1.5} dashed dashSize={30} gapSize={15} depthTest={false} renderOrder={9} />}
+    </>
+  );
+}
+
 /** Ghosts of the copies an open Array panel would create. */
 function ArrayPreview() {
   const draft = useScene((s) => s.arrayDraft);
@@ -474,6 +501,9 @@ function PickLayer() {
           )}
         </group>
       )}
+
+      {/* Mirror: the reflected selection follows the second point */}
+      {tool === 'pickmirror' && base && cur && <MirrorPreview a={base} b={cur} plane={plane} objects={objects.filter((o) => selection.includes(o.id))} />}
 
       {/* Rubber band from the last picked point */}
       {cur && pts.length > 0 && !(tool === 'dimension' && pts.length === 2) && (
@@ -684,7 +714,7 @@ export default function Viewport() {
         ),
       )}
       {tool === 'sketch' && <SketchLayer />}
-      {(tool === 'pickmove' || tool === 'pickcopy' || tool === 'measure' || tool === 'dimension' || tool === 'arraycenter') && <PickLayer />}
+      {(tool === 'pickmove' || tool === 'pickcopy' || tool === 'pickmirror' || tool === 'measure' || tool === 'dimension' || tool === 'arraycenter') && <PickLayer />}
       <ArrayPreview />
 
       <OrbitControls
