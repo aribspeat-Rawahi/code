@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useScene, type TransformMode } from '../store/sceneStore';
 import { OBJECT_LABEL, PRIMITIVES } from '../tools/primitives';
-import { exportModel, newProject, openProject, saveProject } from '../io/files';
+import { exportDxf, exportModel, newProject, openProject, saveProject } from '../io/files';
 
 const MODES: { mode: TransformMode; label: string; key: string }[] = [
   { mode: 'translate', label: 'Move', key: 'W' },
@@ -47,6 +47,7 @@ function FileMenu() {
           <hr />
           {item('Export STL…', 'mm', () => exportModel('stl'))}
           {item('Export OBJ…', 'mm', () => exportModel('obj'))}
+          {item('Export DXF (this view)…', '2D', () => exportDxf())}
         </div>
       )}
     </div>

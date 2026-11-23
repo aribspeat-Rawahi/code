@@ -53,3 +53,10 @@ View bar (top-left of the viewport) or keys: `1` Top · `2` Front · `3` Right �
 - The work plane follows the view: XY in plan, XZ in front/back, YZ in side views — so Move/Dist/Dim clicks land on that plane.
 - Sketch always draws on the ground: starting it from an elevation switches to Top.
 - Commands: `VIEW top|front|right|left|back|iso`, `ORTHO`, `PERSP`, `ZOOM` / `FIT`.
+
+## DXF export (2D drawings)
+**File ▾ → Export DXF (this view)** or `DXF [top|front|right|left|back]` (default: the current view; from Iso it exports Top).
+- DXF R12 (AC1009), millimetres (`$INSUNITS` = 4) — opens in AutoCAD, LibreCAD, QCAD, DraftSight, BricsCAD, Inkscape.
+- Layers: `VISIBLE` (continuous), `HIDDEN` (dashed — e.g. door jambs under the wall top in plan, holes in an elevation), `DIMENSIONS`.
+- Lines are the model's hard edges plus silhouettes for that view; hidden parts are found by ray tests against the model.
+- Dimension text uses the unit chosen in the app; geometry is always in mm.

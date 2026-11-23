@@ -9,7 +9,18 @@ import * as THREE from 'three';
  * elementary segments, and a segment is drawn only if the faces touching it meet at an angle
  * above the threshold (or it is a true open border).
  */
-export function featureEdges(geom: THREE.BufferGeometry, thresholdDeg = 20): THREE.BufferGeometry {
+export function featureEdges(
+  geom: THREE.BufferGeometry,
+  thresholdDeg = 20,
+  /** If given, also keep silhouette edges as seen from this direction (towards the viewer). */
+  viewDir?: THREE.Vector3,
+  /**
+   * Edges with a face on one side only. In a closed solid these are either real edges whose
+   * neighbour didn't line up numerically (keep), or cracks inside a flat face left by CSG (drop).
+   * Pass a function to decide per piece; `true` keeps them all.
+   */
+  openBorders: boolean | ((a: THREE.Vector3, b: THREE.Vector3, n: THREE.Vector3) => boolean) = true,
+): THREE.BufferGeometry {
   const pos = geom.getAttribute('position');
   const out = new THREE.BufferGeometry();
   if (!pos) return out;
@@ -64,6 +75,7 @@ export function featureEdges(geom: THREE.BufferGeometry, thresholdDeg = 20): THR
   for (const line of lines.values()) {
     const ts = [...new Set(line.segs.flatMap((s) => [s.t0, s.t1]))].sort((x, y) => x - y);
     let runStart: number | null = null;
+    const pointAt = (t: number) => line.p0.clone().addScaledVector(line.d, t);
     for (let i = 0; i + 1 < ts.length; i++) {
       const s = ts[i];
       const e = ts[i + 1];
@@ -72,11 +84,19 @@ export function featureEdges(geom: THREE.BufferGeometry, thresholdDeg = 20): THR
         const mid = (s + e) / 2;
         const cover = line.segs.filter((g) => g.t0 <= mid && mid <= g.t1);
         if (cover.length === 0) draw = false; // gap between pieces on the same line (e.g. across an opening)
-        else if (cover.length === 1) draw = true; // open border
+        else if (cover.length === 1)
+          draw = typeof openBorders === 'function' ? openBorders(pointAt(s), pointAt(e), cover[0].n) : openBorders;
         else
           outer: for (let x = 0; x < cover.length; x++)
             for (let y = x + 1; y < cover.length; y++)
-              if (Math.abs(cover[x].n.dot(cover[y].n)) < cosT) {
+              if (
+                Math.abs(cover[x].n.dot(cover[y].n)) < cosT ||
+                // silhouette: one face turned towards the viewer, the other away — but not two
+                // coplanar faces with opposite winding (a CSG artefact), which would cross flat faces
+                (viewDir &&
+                  cover[x].n.dot(viewDir) * cover[y].n.dot(viewDir) < 0 &&
+                  Math.abs(cover[x].n.dot(cover[y].n)) < 0.9999)
+              ) {
                 draw = true;
                 break outer;
               }

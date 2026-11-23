@@ -1,6 +1,6 @@
 import { useScene, type CadObject, type Vec3 } from '../store/sceneStore';
 import { findObject, flatten } from '../store/tree';
-import { exportModel, newProject, openProject, saveProject } from '../io/files';
+import { exportDxf, exportModel, newProject, openProject, saveProject } from '../io/files';
 import { DEG2RAD, fromDisplay, toDisplay, type Unit } from '../units';
 import { wallPoints, profileFromPoints, type Pt } from './sketch';
 
@@ -19,6 +19,7 @@ const HELP = [
   'DIST (pick 2 points) or DIST x1 y1 x2 y2 / x1 y1 z1 x2 y2 z2     DIM (pick a, b, then line position)',
   'DIM x1 y1 x2 y2 [offset]     AUTODIM (width/depth/height of the selected object)',
   'UNDO  REDO  UNITS mm|cm|m  SNAP on|off|step  NEW  OPEN  SAVE  EXPORT stl|obj',
+  'DXF [top|front|right|left|back]  2D drawing of a view (default: current view), visible + hidden lines + dimensions',
 ];
 
 const WALL_THICKNESS = 200; // mm
@@ -369,6 +370,12 @@ export async function runCommand(raw: string): Promise<void> {
       return openProject();
     case 'SAVE':
       return saveProject();
+    case 'DXF': {
+      const v = args[0]?.toLowerCase();
+      const views = ['top', 'front', 'right', 'left', 'back'] as const;
+      if (v && !views.includes(v as (typeof views)[number])) return print('Usage: DXF [top|front|right|left|back]');
+      return exportDxf(v as (typeof views)[number] | undefined);
+    }
     case 'EXPORT': {
       const k = args[0]?.toLowerCase();
       if (k !== 'stl' && k !== 'obj') return print('Usage: EXPORT stl|obj');

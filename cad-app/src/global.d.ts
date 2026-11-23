@@ -6,7 +6,7 @@ declare global {
     nirman?: {
       platform: string;
       saveFile(req: {
-        kind: 'project' | 'stl' | 'obj';
+        kind: 'project' | 'stl' | 'obj' | 'dxf';
         defaultName: string;
         data: string | Uint8Array;
       }): Promise<{ saved: boolean; path?: string }>;

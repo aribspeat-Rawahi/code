@@ -5,11 +5,12 @@ import path from 'node:path';
 const devUrl = process.env.VITE_DEV_SERVER_URL;
 let mainWindow: BrowserWindow | null = null;
 
-type FileKind = 'project' | 'stl' | 'obj';
+type FileKind = 'project' | 'stl' | 'obj' | 'dxf';
 const FILE_KINDS: Record<FileKind, Electron.FileFilter> = {
   project: { name: 'Nirman CAD project', extensions: ['ncad'] },
   stl: { name: 'STL mesh', extensions: ['stl'] },
   obj: { name: 'Wavefront OBJ', extensions: ['obj'] },
+  dxf: { name: 'DXF drawing', extensions: ['dxf'] },
 };
 
 const MAX_SAVE_BYTES = 500 * 1024 * 1024;
