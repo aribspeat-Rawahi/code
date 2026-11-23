@@ -72,3 +72,12 @@ Layers panel (bottom-left): `+ Layer`, click a name to make it **current** (new 
 - Move objects: Properties → Layer, or `CHLAYER name`.
 - Commands: `LAYER NEW|SET|ON|OFF|LOCK|UNLOCK|DEL name`, `LAYER LIST`.
 - DXF export writes one DXF layer per app layer (plus a dashed `NAME_HIDDEN` layer), colour mapped to the nearest ACI.
+
+## Copy & Array
+- **Copy ⇢** (`C`, or `COPY` with no arguments): click a base point, then click each place for a copy (object snap works); `Esc` ends.
+  `COPY dx dy [dz]` copies by a typed offset.
+- **Array** (`A`, or `ARRAY`): panel with a live preview, applied as one undo step.
+  - Rectangular: columns × rows × levels with X/Y/Z spacing — e.g. a column grid: `ARRAY RECT 4 3 3000 4000`.
+  - Polar: count, sweep angle, centre (type it or **Pick centre in view** and snap to a Center), optional rotation —
+    e.g. a 6-hole bolt circle around the origin: `ARRAY POLAR 6 360 0 0`, then select the plate + holes → Subtract.
+- Copies are independent objects (up to 2000 per array) on the source's layer; locked layers and dimensions are skipped.

@@ -186,3 +186,21 @@ select { padding: 4px 6px; }
 }
 .osnap-pop label { display: flex; align-items: center; gap: 6px; color: var(--text); cursor: pointer; }
 .osnap-pop .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+.array-panel {
+  position: absolute; top: 48px; right: 8px; z-index: 6; width: 250px;
+  padding: 10px; display: flex; flex-direction: column; gap: 4px;
+  background: rgba(37, 43, 51, 0.97); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.array-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.seg { display: flex; }
+.seg button { font-size: 12px; padding: 3px 8px; border-radius: 0; }
+.seg button:first-child { border-radius: 4px 0 0 4px; }
+.seg button:last-child { border-radius: 0 4px 4px 0; }
+.array-panel .field { grid-template-columns: 80px 1fr; }
+.num-wrap { display: flex; align-items: center; gap: 4px; }
+.num-wrap small { color: var(--muted); text-transform: none; }
+.array-panel .pick { margin: 4px 0; }
+.array-panel .check { display: flex; gap: 6px; align-items: center; color: var(--text); margin: 4px 0; }
+.array-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }

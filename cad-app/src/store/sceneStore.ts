@@ -10,14 +10,84 @@ import {
 } from '../tools/primitives';
 import { profileFromPoints, type Pt } from '../tools/sketch';
 import { buildObjectGeometry, matrixOf } from '../tools/geometry';
+import { sceneBounds } from '../tools/bounds';
 import { toDisplay, type Unit } from '../units';
 import { ALL_SNAP_MODES, type SnapKind, type SnapModes } from '../tools/snap';
 import { findObject, flatten, removeIn, updateIn } from './tree';
 
 export type Vec3 = [number, number, number];
 export type TransformMode = 'translate' | 'rotate' | 'scale';
-export type Tool = 'select' | 'sketch' | 'pickmove' | 'measure' | 'dimension';
-export type PickTool = 'pickmove' | 'measure' | 'dimension';
+export type Tool = 'select' | 'sketch' | 'pickmove' | 'pickcopy' | 'measure' | 'dimension' | 'arraycenter';
+export type PickTool = 'pickmove' | 'pickcopy' | 'measure' | 'dimension' | 'arraycenter';
+
+/** Array settings; lengths in mm, angle in degrees. */
+export interface ArrayParams {
+  kind: 'rect' | 'polar';
+  cols: number;
+  rows: number;
+  levels: number;
+  dx: number;
+  dy: number;
+  dz: number;
+  count: number;
+  angle: number; // total sweep; 360 = full circle
+  center: [number, number];
+  rotate: boolean; // polar: turn each copy to face the centre like the original
+}
+
+/** One copy's placement: world' = Rz(rz) · world + t. */
+export interface Placement {
+  t: Vec3;
+  rz: number;
+}
+
+const MAX_ARRAY_COPIES = 2000;
+
+/** Placements of all copies for one object (the original itself is not included). */
+export function arrayPlacements(p: ArrayParams, objPos: Vec3): Placement[] {
+  const out: Placement[] = [];
+  if (p.kind === 'rect') {
+    for (let l = 0; l < p.levels; l++)
+      for (let r = 0; r < p.rows; r++)
+        for (let c = 0; c < p.cols; c++) {
+          if (!l && !r && !c) continue;
+          out.push({ t: [c * p.dx, r * p.dy, l * p.dz], rz: 0 });
+        }
+    return out.slice(0, MAX_ARRAY_COPIES);
+  }
+  const full = Math.abs(Math.abs(p.angle) - 360) < 1e-9;
+  const step = ((full ? p.angle / p.count : p.angle / Math.max(p.count - 1, 1)) * Math.PI) / 180;
+  const [cx, cy] = p.center;
+  for (let i = 1; i < p.count; i++) {
+    const a = step * i;
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    if (p.rotate) {
+      // Rotate about the centre: t = c - Rz·c
+      out.push({ t: [cx - (cos * cx - sin * cy), cy - (sin * cx + cos * cy), 0], rz: a });
+    } else {
+      // Move the object's position around the centre, keep its orientation
+      const dx = objPos[0] - cx;
+      const dy = objPos[1] - cy;
+      out.push({ t: [cx + cos * dx - sin * dy - objPos[0], cy + sin * dx + cos * dy - objPos[1], 0], rz: 0 });
+    }
+  }
+  return out.slice(0, MAX_ARRAY_COPIES);
+}
+
+/** Apply a placement to an object's own position and rotation. */
+export function placeObject(o: CadObject, pl: Placement): Pick<CadObject, 'position' | 'rotation'> {
+  const cos = Math.cos(pl.rz);
+  const sin = Math.sin(pl.rz);
+  const [x, y, z] = o.position;
+  const position: Vec3 = [cos * x - sin * y + pl.t[0], sin * x + cos * y + pl.t[1], z + pl.t[2]];
+  if (!pl.rz) return { position, rotation: o.rotation };
+  const q = new THREE.Quaternion()
+    .setFromAxisAngle(new THREE.Vector3(0, 0, 1), pl.rz)
+    .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...o.rotation, 'XYZ')));
+  const e = new THREE.Euler().setFromQuaternion(q, 'XYZ');
+  return { position, rotation: [e.x, e.y, e.z] };
+}
 export type ViewName = 'top' | 'front' | 'back' | 'left' | 'right' | 'iso';
 /** Plane that picking and the grid use: XY (plan), XZ (front/back elevation), YZ (side elevation). */
 export type WorkPlane = 'xy' | 'xz' | 'yz';
@@ -106,6 +176,8 @@ interface SceneState {
   pick: PickInfo | null;
   /** Points picked so far by the active pick tool (move: base; measure: start; dimension: a, b). */
   pickPoints: Vec3[];
+  /** Array panel settings; null while the panel is closed. */
+  arrayDraft: ArrayParams | null;
   projectName: string;
   view: ViewState;
   layers: Layer[];
@@ -137,6 +209,11 @@ interface SceneState {
   startPickTool: (tool: PickTool) => boolean;
   addPickPoint: (p: Vec3) => void;
   addDimension: (a: Vec3, b: Vec3, offset?: Vec3) => string | null;
+  copySelection: (placements: (o: CadObject) => Placement[]) => number;
+  openArray: (kind?: ArrayParams['kind']) => boolean;
+  updateArray: (patch: Partial<ArrayParams>) => void;
+  closeArray: () => void;
+  applyArray: () => number;
   autoDimension: (id: string) => number;
   setProjectName: (name: string) => void;
   setView: (name: ViewName, ortho?: boolean) => void;
@@ -206,6 +283,8 @@ function cloneWithNewIds(o: CadObject): CadObject {
 }
 
 const PICK_HELP: Record<PickTool, string> = {
+  pickcopy: 'Copy: click the base point (e.g. a corner), then each place for a copy. Or type x y z / @dx dy dz. Esc ends.',
+  arraycenter: 'Array: click the centre point (object snap works, e.g. Center of a plate). Esc cancels.',
   pickmove: 'Move: click the base point (e.g. a corner of the object), then the target point. Or type x y z / @dx dy dz. Esc cancels.',
   measure: 'Measure: click two points (object snap works). Or type x y z / @dx dy dz. Esc ends.',
   dimension: 'Dimension: click two points, then where the dimension line goes. Esc ends.',
@@ -244,6 +323,7 @@ export const useScene = create<SceneState>((set, get) => ({
   cursor: null,
   pick: null,
   pickPoints: [],
+  arrayDraft: null,
   projectName: 'untitled',
   view: { name: null, ortho: false, seq: 0, fitSeq: 0 },
   layers: [DEFAULT_LAYER],
@@ -435,8 +515,8 @@ export const useScene = create<SceneState>((set, get) => ({
 
   startPickTool: (tool) => {
     const s = get();
-    if (tool === 'pickmove' && !s.selection.some((id) => s.objects.some((o) => o.id === id))) {
-      s.print('Error: select the object(s) to move first.');
+    if ((tool === 'pickmove' || tool === 'pickcopy') && !s.selection.some((id) => s.objects.some((o) => o.id === id))) {
+      s.print(`Error: select the object(s) to ${tool === 'pickmove' ? 'move' : 'copy'} first.`);
       return false;
     }
     set({ tool, pickPoints: [], pick: null, sketchPoints: [], cursor: null });
@@ -462,6 +542,24 @@ export const useScene = create<SceneState>((set, get) => ({
       );
       set({ ...withHistory(s), objects, tool: 'select', pickPoints: [], pick: null });
       return s.print(`Moved ${ids.size} object(s) by ${d.map(r).join(', ')} ${s.unit} (distance ${r(Math.hypot(...d))} ${s.unit}).`);
+    }
+
+    if (s.tool === 'pickcopy') {
+      if (pts.length < 2) {
+        set({ pickPoints: pts });
+        return s.print('Base point set. Click each place for a copy; Esc when done.');
+      }
+      const [base, target] = pts;
+      const d: Vec3 = [target[0] - base[0], target[1] - base[1], target[2] - base[2]];
+      const n = s.copySelection(() => [{ t: d, rz: 0 }]);
+      set({ pickPoints: [base] }); // keep the base: every further click places another copy
+      return s.print(`Copied ${n} object(s) by ${d.map(r).join(', ')} ${s.unit}. Click again for another copy, Esc to finish.`);
+    }
+
+    if (s.tool === 'arraycenter') {
+      const draft = s.arrayDraft;
+      set({ tool: 'select', pickPoints: [], pick: null, ...(draft ? { arrayDraft: { ...draft, kind: 'polar', center: [p[0], p[1]] } } : {}) });
+      return s.print(`Array centre: ${r(p[0])}, ${r(p[1])} ${s.unit}`);
     }
 
     if (s.tool === 'measure') {
@@ -513,6 +611,75 @@ export const useScene = create<SceneState>((set, get) => ({
     set((st) => ({ ...withHistory(st), objects: [...st.objects, obj] }));
     s.print(`${obj.name}: ${Math.round(toDisplay(len, s.unit) * 1000) / 1000} ${s.unit}`);
     return id;
+  },
+
+  copySelection: (placements) => {
+    const s = get();
+    const sources = s.objects.filter(
+      (o) => s.selection.includes(o.id) && !layerOf(s.layers, o).locked && o.type !== 'dimension',
+    );
+    const copies: CadObject[] = [];
+    for (const o of sources)
+      for (const pl of placements(o)) {
+        if (copies.length >= MAX_ARRAY_COPIES) break;
+        copies.push({ ...cloneWithNewIds(o), ...placeObject(o, pl) });
+      }
+    if (!copies.length) return 0;
+    // Number the copies after the source name: "Column 1" -> "Column 2", "Column 3", ...
+    const all = [...s.objects];
+    for (const c of copies) {
+      const label = c.name.replace(/\s+\d+$/, '').replace(/ copy$/, '');
+      c.name = nextName(all, label || OBJECT_LABEL[c.type]);
+      all.push(c);
+    }
+    set({ ...withHistory(s), objects: [...s.objects, ...copies] });
+    return copies.length;
+  },
+
+  openArray: (kind = 'rect') => {
+    const s = get();
+    const sel = s.objects.filter((o) => s.selection.includes(o.id) && o.type !== 'dimension');
+    if (!sel.length) {
+      s.print('Error: select the object(s) to array first.');
+      return false;
+    }
+    // Sensible default spacing: the selection's size plus half again, rounded to the snap step
+    const box = sceneBounds(sel);
+    const step = s.snap.step || 10;
+    const sp = (v: number) => Math.max(step, Math.ceil((v * 1.5) / step) * step);
+    const size = box ? box.getSize(new THREE.Vector3()) : new THREE.Vector3(100, 100, 100);
+    const c = box ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3();
+    set({
+      tool: 'select',
+      arrayDraft: s.arrayDraft ?? {
+        kind,
+        cols: 3,
+        rows: 1,
+        levels: 1,
+        dx: sp(size.x),
+        dy: sp(size.y),
+        dz: sp(size.z),
+        count: 6,
+        angle: 360,
+        center: [c.x - sp(size.x) * 1.5, c.y],
+        rotate: true,
+      },
+    });
+    return true;
+  },
+
+  updateArray: (patch) => set((s) => (s.arrayDraft ? { arrayDraft: { ...s.arrayDraft, ...patch } } : {})),
+  closeArray: () => set((s) => ({ arrayDraft: null, tool: s.tool === 'arraycenter' ? 'select' : s.tool })),
+
+  applyArray: () => {
+    const s = get();
+    const p = s.arrayDraft;
+    if (!p) return 0;
+    const n = s.copySelection((o) => arrayPlacements(p, o.position));
+    set({ arrayDraft: null });
+    const what = p.kind === 'rect' ? `${p.cols} × ${p.rows}${p.levels > 1 ? ` × ${p.levels}` : ''} grid` : `${p.count} around a circle`;
+    s.print(n ? `Array: ${what} — ${n} copies added.` : 'Array: nothing to copy (locked layer or dimensions only).');
+    return n;
   },
 
   autoDimension: (id) => {

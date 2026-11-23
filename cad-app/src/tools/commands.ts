@@ -11,6 +11,8 @@ const HELP = [
   'WALL x1 y1 x2 y2 [thickness] [height]     POLY h x1 y1 x2 y2 x3 y3 ...',
   'SKETCH  then click points, or type  x y  /  @dx dy ;  Enter or CLOSE to extrude, CANCEL to stop',
   'HEIGHT h  (extrude height for sketches)',
+  'COPY (no args) = copy by points, click for each copy   COPY dx dy [dz]',
+  'ARRAY = panel with preview   ARRAY RECT cols rows dx dy [levels dz]   ARRAY POLAR count [angle] [cx cy] [norotate]',
   'MOVE (no args) = move by points: pick base point, then target (snaps to corners/midpoints/centres)',
   'MOVE dx dy dz   MOVETO x y z   ROTATE deg [X|Y|Z]   COPY [dx dy dz]   DEL   SELECT name   LIST',
   'UNION  SUBTRACT  INTERSECT  (on the selection; first selected = base)   EXPLODE',
@@ -157,7 +159,7 @@ export async function runCommand(raw: string): Promise<void> {
     case 'P':
     case '@': {
       const t = st().tool;
-      if (t === 'pickmove' || t === 'measure' || t === 'dimension') {
+      if (t === 'pickmove' || t === 'pickcopy' || t === 'measure' || t === 'dimension' || t === 'arraycenter') {
         const v = nums(2, 3, cmd === 'P' ? 'x y [z]' : '@dx dy [dz]');
         if (!v) return;
         const last = st().pickPoints.at(-1);
@@ -223,13 +225,53 @@ export async function runCommand(raw: string): Promise<void> {
       st().updateObject(o.id, { rotation: r });
       return;
     }
-    case 'COPY': {
-      const v = args.length ? nums(2, 3, 'COPY [dx dy dz]') : [];
-      const o = v && selected();
-      if (!v || !o) return;
-      const off: Vec3 = v.length ? [L(v[0]), L(v[1]), L(v[2] ?? 0)] : [100, 0, 0];
-      st().duplicateObject(o.id, off);
-      return;
+    case 'COPY':
+    case 'CP': {
+      if (!args.length) {
+        st().startPickTool('pickcopy');
+        return;
+      }
+      const v = nums(2, 3, 'COPY dx dy [dz]   (or COPY alone to pick points)');
+      if (!v) return;
+      const d: Vec3 = [L(v[0]), L(v[1]), L(v[2] ?? 0)];
+      const n = st().copySelection(() => [{ t: d, rz: 0 }]);
+      return print(n ? `Copied ${n} object(s).` : 'Error: select object(s) to copy first.');
+    }
+    case 'ARRAY':
+    case 'AR': {
+      const kind = args[0]?.toUpperCase();
+      if (!kind) {
+        st().openArray();
+        return;
+      }
+      const s = st();
+      const nums2 = args.slice(1).filter((a) => /^-?[\d.]+$/.test(a)).map(Number);
+      if (kind === 'RECT' || kind === 'R') {
+        // ARRAY RECT cols rows dx dy [levels dz]
+        const [cols, rows, dx, dy, levels = 1, dz = 0] = nums2;
+        if (![cols, rows].every((n) => Number.isInteger(n) && n >= 1) || dx === undefined || dy === undefined)
+          return print('Usage: ARRAY RECT cols rows dx dy [levels dz]');
+        if (!s.openArray('rect')) return;
+        s.updateArray({ kind: 'rect', cols, rows, dx: L(dx), dy: L(dy), levels: Math.max(1, Math.floor(levels)), dz: L(dz) });
+        s.applyArray();
+        return;
+      }
+      if (kind === 'POLAR' || kind === 'P') {
+        // ARRAY POLAR count [angle] [cx cy] [norotate]
+        const [count, angle = 360, cx, cy] = nums2;
+        if (!Number.isInteger(count) || count < 2) return print('Usage: ARRAY POLAR count [angle] [cx cy] [norotate]');
+        if (!s.openArray('polar')) return;
+        s.updateArray({
+          kind: 'polar',
+          count,
+          angle,
+          ...(cx !== undefined && cy !== undefined ? { center: [L(cx), L(cy)] as [number, number] } : {}),
+          rotate: !args.some((a) => a.toLowerCase() === 'norotate'),
+        });
+        s.applyArray();
+        return;
+      }
+      return print('Usage: ARRAY (panel)  |  ARRAY RECT cols rows dx dy [levels dz]  |  ARRAY POLAR count [angle] [cx cy] [norotate]');
     }
     case 'DEL':
     case 'DELETE':

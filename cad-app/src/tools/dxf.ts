@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { MeshBVH, acceleratedRaycast } from 'three-mesh-bvh';
 import { layerOf, type CadObject, type Layer, type ViewName } from '../store/sceneStore';
-import { featureEdges } from './edges';
+import { featureEdges, isFlatCrack } from './edges';
 import { buildObjectGeometry, matrixOf } from './geometry';
 import { toDisplay, type Unit } from '../units';
 
@@ -184,36 +184,6 @@ export function buildDxf(
     lines: drawn.filter((s) => !s.hidden && !s.dim).length,
     hidden: drawn.filter((s) => s.hidden).length,
   };
-}
-
-/**
- * An edge piece with a face on one side only: is it a crack inside a flat face?
- * Step a little to both sides within the face plane; if the surface continues flat on both
- * sides, nothing is really there. A real edge has empty space or a turning face on one side.
- */
-function isFlatCrack(g: THREE.BufferGeometry, a: THREE.Vector3, b: THREE.Vector3, n: THREE.Vector3, diag: number): boolean {
-  const bvh = (g as THREE.BufferGeometry & { boundsTree?: MeshBVH }).boundsTree;
-  if (!bvh) return false;
-  const pos = g.getAttribute('position');
-  const index = g.getIndex();
-  const vi = (i: number) => (index ? index.getX(i) : i);
-  const mid = a.clone().lerp(b, 0.5);
-  const side = new THREE.Vector3().crossVectors(n, b.clone().sub(a)).normalize();
-  const step = diag * 1e-3;
-  const v0 = new THREE.Vector3();
-  const v1 = new THREE.Vector3();
-  const v2 = new THREE.Vector3();
-  for (const sign of [1, -1]) {
-    const probe = mid.clone().addScaledVector(side, step * sign);
-    const hit = bvh.closestPointToPoint(probe);
-    if (!hit || hit.distance > step * 0.05) return false; // empty space on this side
-    v0.fromBufferAttribute(pos, vi(hit.faceIndex * 3));
-    v1.fromBufferAttribute(pos, vi(hit.faceIndex * 3 + 1));
-    v2.fromBufferAttribute(pos, vi(hit.faceIndex * 3 + 2));
-    const fn = v1.sub(v0).cross(v2.sub(v0)).normalize();
-    if (Math.abs(fn.dot(n)) < 0.999) return false; // the surface turns here: a real edge
-  }
-  return true;
 }
 
 /** Parts of segment h not covered by collinear segments in `cover`. */

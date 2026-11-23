@@ -43,8 +43,10 @@ export default function CommandLine() {
         <span>
           {sketching
             ? 'Point (x y / @dx dy):'
-            : tool === 'pickmove'
+            : tool === 'pickmove' || tool === 'pickcopy'
               ? picked ? 'Target (x y z / @dx dy dz):' : 'Base point (x y z):'
+              : tool === 'arraycenter'
+                ? 'Array centre (x y):'
               : tool === 'measure' || tool === 'dimension'
                 ? `Point ${picked + 1} (x y z / @dx dy dz):`
                 : 'Command:'}

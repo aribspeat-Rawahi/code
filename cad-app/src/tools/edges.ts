@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { MeshBVH } from 'three-mesh-bvh';
 
 /**
  * Feature edges (silhouette-independent "hard" edges) that tolerate T-junctions.
@@ -113,4 +114,49 @@ export function featureEdges(
 
   out.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
   return out;
+}
+
+/**
+ * An edge piece with a face on one side only: is it a crack inside a flat face?
+ * Step a little to both sides within the face plane; if the surface continues flat on both
+ * sides, nothing is really there. A real edge has empty space or a turning face on one side.
+ */
+export function isFlatCrack(g: THREE.BufferGeometry, a: THREE.Vector3, b: THREE.Vector3, n: THREE.Vector3, diag: number): boolean {
+  const bvh = (g as THREE.BufferGeometry & { boundsTree?: MeshBVH }).boundsTree;
+  if (!bvh) return false;
+  const pos = g.getAttribute('position');
+  const index = g.getIndex();
+  const vi = (i: number) => (index ? index.getX(i) : i);
+  const mid = a.clone().lerp(b, 0.5);
+  const side = new THREE.Vector3().crossVectors(n, b.clone().sub(a)).normalize();
+  const step = diag * 1e-3;
+  const v0 = new THREE.Vector3();
+  const v1 = new THREE.Vector3();
+  const v2 = new THREE.Vector3();
+  for (const sign of [1, -1]) {
+    const probe = mid.clone().addScaledVector(side, step * sign);
+    const hit = bvh.closestPointToPoint(probe);
+    if (!hit || hit.distance > step * 0.05) return false; // empty space on this side
+    v0.fromBufferAttribute(pos, vi(hit.faceIndex * 3));
+    v1.fromBufferAttribute(pos, vi(hit.faceIndex * 3 + 1));
+    v2.fromBufferAttribute(pos, vi(hit.faceIndex * 3 + 2));
+    const fn = v1.sub(v0).cross(v2.sub(v0)).normalize();
+    if (Math.abs(fn.dot(n)) < 0.999) return false; // the surface turns here: a real edge
+  }
+  return true;
+}
+
+
+/**
+ * Feature edges for a boolean result: open-border pieces are kept only when they are real edges,
+ * not cracks inside flat faces left by CSG. Builds a BVH on the geometry (reorders its index,
+ * which doesn't change the shape).
+ */
+export function cleanFeatureEdges(g: THREE.BufferGeometry, thresholdDeg = 20): THREE.BufferGeometry {
+  if (!g.getAttribute('position')?.count) return featureEdges(g, thresholdDeg);
+  const geo = g as THREE.BufferGeometry & { boundsTree?: MeshBVH };
+  if (!geo.boundsTree) geo.boundsTree = new MeshBVH(g);
+  g.computeBoundingBox();
+  const diag = g.boundingBox!.getSize(new THREE.Vector3()).length() || 1;
+  return featureEdges(g, thresholdDeg, undefined, (a, b, n) => !isFlatCrack(g, a, b, n, diag));
 }

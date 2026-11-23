@@ -3,6 +3,7 @@ import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
 import { GizmoHelper, Html, OrthographicCamera, PerspectiveCamera, GizmoViewport, Grid, Line, OrbitControls, TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
 import {
+  arrayPlacements,
   dimOffset,
   isFlatView,
   shownObjects,
@@ -15,11 +16,12 @@ import {
 } from '../store/sceneStore';
 import { sceneBounds } from '../tools/bounds';
 import { buildObjectGeometry } from '../tools/geometry';
-import { featureEdges } from '../tools/edges';
+import { cleanFeatureEdges, featureEdges } from '../tools/edges';
 
 /** Hard edges of a mesh, robust to the T-junctions boolean results contain. */
-function FeatureEdges({ geometry, color }: { geometry: THREE.BufferGeometry; color: string }) {
-  const edges = useMemo(() => featureEdges(geometry), [geometry]);
+function FeatureEdges({ geometry, color, clean = false }: { geometry: THREE.BufferGeometry; color: string; clean?: boolean }) {
+  // Boolean results can contain CSG cracks on flat faces; `clean` filters those out
+  const edges = useMemo(() => (clean ? cleanFeatureEdges(geometry) : featureEdges(geometry)), [geometry, clean]);
   useEffect(() => () => edges.dispose(), [edges]);
   return (
     <lineSegments geometry={edges} raycast={() => null}>
@@ -99,7 +101,7 @@ function ObjectMesh({
       }
     >
       <meshStandardMaterial color={obj.color} metalness={0.1} roughness={0.6} />
-      <FeatureEdges geometry={geometry} color={selected ? '#ff9f1c' : '#1b1f24'} />
+      <FeatureEdges geometry={geometry} color={selected ? '#ff9f1c' : '#1b1f24'} clean={obj.type === 'boolean'} />
     </mesh>
   );
 
@@ -395,6 +397,30 @@ function DimensionView({ obj, selected }: { obj: CadObject; selected: boolean })
   );
 }
 
+/** Ghosts of the copies an open Array panel would create. */
+function ArrayPreview() {
+  const draft = useScene((s) => s.arrayDraft);
+  const selection = useScene((s) => s.selection);
+  const objects = useScene((s) => s.objects);
+  if (!draft) return null;
+  const sources = objects.filter((o) => selection.includes(o.id) && o.type !== 'dimension');
+  return (
+    <group>
+      {sources.flatMap((o) =>
+        arrayPlacements(draft, o.position)
+          .slice(0, 500) // keep the preview responsive for huge arrays
+          .map((pl, i) => (
+            // world' = Rz · world + t, as a group around the untouched object
+            <group key={`${o.id}-${i}`} position={pl.t} rotation={[0, 0, pl.rz]}>
+              <PartGhost obj={o} highlight />
+            </group>
+          )),
+      )}
+      {draft.kind === 'polar' && <Dots3 points={[[draft.center[0], draft.center[1], 0]]} color="#f472b6" size={10} />}
+    </group>
+  );
+}
+
 /**
  * Point-picking tools with object snap:
  *  - pickmove: base point → target point; the selection moves by the difference
@@ -434,14 +460,14 @@ function PickLayer() {
   const base = pts[0];
   const cur = pick?.point;
   const d: Vec3 | null = base && cur ? [cur[0] - base[0], cur[1] - base[1], cur[2] - base[2]] : null;
-  const moving = tool === 'pickmove' ? objects.filter((o) => selection.includes(o.id)) : [];
+  const moving = tool === 'pickmove' || tool === 'pickcopy' ? objects.filter((o) => selection.includes(o.id)) : [];
 
   return (
     <group>
       <PickPlane plane={plane} onMove={(e) => resolve(e)} onPick={(e) => useScene.getState().addPickPoint(resolve(e))} />
 
       {/* Move: live preview of where the selection will land */}
-      {tool === 'pickmove' && d && (
+      {(tool === 'pickmove' || tool === 'pickcopy') && d && (
         <group position={d}>
           {moving.map((o) =>
             o.type === 'dimension' ? <DimensionView key={o.id} obj={o} selected /> : <PartGhost key={o.id} obj={o} highlight />,
@@ -658,7 +684,8 @@ export default function Viewport() {
         ),
       )}
       {tool === 'sketch' && <SketchLayer />}
-      {(tool === 'pickmove' || tool === 'measure' || tool === 'dimension') && <PickLayer />}
+      {(tool === 'pickmove' || tool === 'pickcopy' || tool === 'measure' || tool === 'dimension' || tool === 'arraycenter') && <PickLayer />}
+      <ArrayPreview />
 
       <OrbitControls
         makeDefault

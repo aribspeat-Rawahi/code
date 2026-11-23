@@ -68,8 +68,8 @@ export default function Toolbar() {
 
   return (
     <header className="toolbar">
-      <span className="brand" title={projectName}>
-        Nirman CAD <small>· {projectName}</small>
+      <span className="brand" title={`Project: ${projectName}`}>
+        Nirman CAD
       </span>
 
       <FileMenu />
@@ -77,7 +77,7 @@ export default function Toolbar() {
       <div className="group" aria-label="Create">
         {PRIMITIVES.map((t) => (
           <button key={t} onClick={() => addObject({ type: t })} title={`Add ${OBJECT_LABEL[t]}`}>
-            + {OBJECT_LABEL[t]}
+            {OBJECT_LABEL[t]}
           </button>
         ))}
         <button
@@ -114,6 +114,21 @@ export default function Toolbar() {
           title="Move by points: base point → target point, with object snap (M)"
         >
           Move ⇢
+        </button>
+        <button
+          className={tool === 'pickcopy' ? 'active' : ''}
+          onClick={() => (tool === 'pickcopy' ? useScene.getState().setTool('select') : useScene.getState().startPickTool('pickcopy'))}
+          disabled={!selectedId && tool !== 'pickcopy'}
+          title="Copy by points: base point, then click each place for a copy (C)"
+        >
+          Copy ⇢
+        </button>
+        <button
+          onClick={() => useScene.getState().openArray()}
+          disabled={!selectedId}
+          title="Array: rectangular grid or polar (circular) pattern of the selection (A)"
+        >
+          Array
         </button>
       </div>
 

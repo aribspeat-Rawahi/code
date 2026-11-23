@@ -6,6 +6,7 @@ import Viewport from './components/Viewport';
 import CommandLine from './components/CommandLine';
 import ViewBar from './components/ViewBar';
 import OsnapMenu from './components/OsnapMenu';
+import ArrayPanel from './components/ArrayPanel';
 import { isFlatView, useScene } from './store/sceneStore';
 import { newProject, openProject, saveProject } from './io/files';
 import { toDisplay, type Unit } from './units';
@@ -52,9 +53,9 @@ function useShortcuts() {
         return;
       }
 
-      if (s.tool === 'pickmove' || s.tool === 'measure' || s.tool === 'dimension') {
+      if (s.tool === 'pickmove' || s.tool === 'pickcopy' || s.tool === 'measure' || s.tool === 'dimension' || s.tool === 'arraycenter') {
         if (k === 'escape') {
-          if (s.pickPoints.length && s.tool !== 'pickmove') useScene.setState({ pickPoints: [] });
+          if (s.pickPoints.length && (s.tool === 'measure' || s.tool === 'dimension')) useScene.setState({ pickPoints: [] });
           else {
             s.setTool('select');
             s.print('Done.');
@@ -100,8 +101,12 @@ function useShortcuts() {
       else if (k === 'r') s.setMode('scale');
       else if (k === 's') s.setTool('sketch');
       else if (k === 'm') s.startPickTool('pickmove');
+      else if (k === 'c') s.startPickTool('pickcopy');
+      else if (k === 'a') s.openArray();
+      else if (k === 'escape' && s.arrayDraft) s.closeArray();
       else if (k === 'q') s.startPickTool('measure');
       else if (k === 'd') s.startPickTool('dimension');
+      else if (k === 'escape' && s.arrayDraft) s.closeArray();
       else if (k === 'escape') s.select(null);
       else if (k === 'delete' || k === 'backspace') s.removeSelected();
     };
@@ -136,7 +141,7 @@ function StatusBar() {
     }
   }
 
-  if ((tool === 'pickmove' || tool === 'measure' || tool === 'dimension') && pick) {
+  if ((tool === 'pickmove' || tool === 'pickcopy' || tool === 'measure' || tool === 'dimension' || tool === 'arraycenter') && pick) {
     const [x, y, z] = pick.point.map(d);
     sketchInfo = `X ${x}  Y ${y}  Z ${z}`;
     if (base) {
@@ -148,6 +153,8 @@ function StatusBar() {
   const hints: Record<string, string> = {
     sketch: 'Click points · Shift = 90° · click first point or Enter to close · Backspace undo point · Esc cancel',
     pickmove: base ? 'Click the target point · Esc cancel' : 'Click the base point on the object · Esc cancel',
+    pickcopy: base ? 'Click each place for a copy · Esc to finish' : 'Click the base point on the object · Esc cancel',
+    arraycenter: 'Click the array centre (snap to a Center) · Esc cancel',
     measure: base ? 'Click the second point · Esc restart' : 'Click the first point · Esc to finish',
     dimension: 'Click point 1, point 2, then where the dimension line goes · Esc to finish',
     select: flat
@@ -183,7 +190,7 @@ function StatusBar() {
       <span>
         View: {view.name ?? 'free'} · {view.ortho ? 'ortho' : 'persp'}
       </span>
-      <span>Tool: {tool === 'select' ? mode : { sketch: 'sketch', pickmove: 'move by points', measure: 'measure', dimension: 'dimension' }[tool]}</span>
+      <span>Tool: {tool === 'select' ? mode : { sketch: 'sketch', pickmove: 'move by points', pickcopy: 'copy', measure: 'measure', dimension: 'dimension', arraycenter: 'array centre' }[tool]}</span>
       {pick?.kind && (
         <span className="snap-kind" style={{ color: SNAP_COLOR[pick.kind] }}>
           ● {SNAP_LABEL[pick.kind]}
@@ -210,6 +217,7 @@ export default function App() {
         <div className="canvas-wrap">
           <Viewport />
           <ViewBar />
+          <ArrayPanel />
         </div>
         <CommandLine />
       </main>
