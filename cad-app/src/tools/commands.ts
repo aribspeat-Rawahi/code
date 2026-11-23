@@ -15,6 +15,7 @@ const HELP = [
   'UNION  SUBTRACT  INTERSECT  (on the selection; first selected = base)   EXPLODE',
   'SELECT name[, name2, ...]  selects several, in order (e.g. SELECT Wall 1, Box 1)',
   'OSNAP on|off  (object snap, F3)',
+  'LAYER NEW|SET|ON|OFF|LOCK|UNLOCK|DEL name   LAYER LIST   CHLAYER name (move selection to a layer)',
   'VIEW top|front|right|left|back|iso (keys 1-5, 0)   ORTHO   PERSP (P)   ZOOM / FIT (F) = zoom extents',
   'DIST (pick 2 points) or DIST x1 y1 x2 y2 / x1 y1 z1 x2 y2 z2     DIM (pick a, b, then line position)',
   'DIM x1 y1 x2 y2 [offset]     AUTODIM (width/depth/height of the selected object)',
@@ -345,6 +346,58 @@ export async function runCommand(raw: string): Promise<void> {
     case 'FIT':
       st().zoomExtents();
       return;
+
+    case 'LAYER':
+    case 'LA': {
+      const sub = args[0]?.toUpperCase();
+      // Layer names may contain spaces: take the rest of the raw line after the sub-command
+      const name = line.replace(/^\S+\s+\S+\s*/, '').trim();
+      const s = st();
+      if (sub === 'LIST' || !sub) {
+        s.layers.forEach((l) => {
+          const n = s.objects.filter((o) => (o.layer ?? '0') === l.id).length;
+          print(`${l.id === s.currentLayer ? '●' : ' '} ${l.name}  ${l.visible ? 'on' : 'off'}${l.locked ? ', locked' : ''}  (${n} objects)`);
+        });
+        return;
+      }
+      if (!name) return print('Usage: LAYER NEW|SET|ON|OFF|LOCK|UNLOCK|DEL name');
+      if (sub === 'NEW') {
+        const id = s.addLayer(name);
+        if (id) print(`Layer ${name} created and set current.`);
+        return;
+      }
+      const layer = s.layers.find((l) => l.name.toLowerCase() === name.toLowerCase());
+      if (!layer) return print(`Error: no layer named "${name}". LAYER LIST shows them.`);
+      switch (sub) {
+        case 'SET':
+          s.setCurrentLayer(layer.id);
+          return print(`Current layer: ${layer.name}`);
+        case 'ON':
+        case 'OFF':
+          s.updateLayer(layer.id, { visible: sub === 'ON' });
+          return print(`Layer ${layer.name} ${sub.toLowerCase()}.`);
+        case 'LOCK':
+        case 'UNLOCK':
+          s.updateLayer(layer.id, { locked: sub === 'LOCK' });
+          return print(`Layer ${layer.name} ${sub === 'LOCK' ? 'locked' : 'unlocked'}.`);
+        case 'DEL':
+        case 'DELETE':
+          s.deleteLayer(layer.id);
+          return;
+        default:
+          return print('Usage: LAYER NEW|SET|ON|OFF|LOCK|UNLOCK|DEL name');
+      }
+    }
+    case 'CHLAYER': {
+      const name = line.replace(/^\S+\s*/, '').trim();
+      const s = st();
+      const layer = s.layers.find((l) => l.name.toLowerCase() === name.toLowerCase());
+      if (!layer) return print(`Usage: CHLAYER name   (no layer named "${name}")`);
+      const ids = s.selection.filter((id) => s.objects.some((o) => o.id === id));
+      if (!ids.length) return print('Error: select object(s) first.');
+      const n = s.moveToLayer(ids, layer.id);
+      return print(`Moved ${n} object(s) to layer ${layer.name}.`);
+    }
 
     case 'OSNAP': {
       const a = args[0]?.toLowerCase();

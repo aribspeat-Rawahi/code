@@ -120,6 +120,7 @@ function StatusBar() {
   const pick = useScene((s) => s.pick);
   const view = useScene((s) => s.view);
   const flat = isFlatView(view);
+  const currentLayer = useScene((s) => s.layers.find((l) => l.id === s.currentLayer));
   const base = useScene((s) => s.pickPoints.at(-1));
 
   const d = (mm: number) => Math.round(toDisplay(mm, unit) * 1000) / 1000;
@@ -178,6 +179,12 @@ function StatusBar() {
       >
         OSnap {snap.object ? 'on' : 'off'}
       </button>
+      {currentLayer && (
+        <span title="Current layer: new objects go here">
+          <span className="swatch" style={{ background: currentLayer.color, display: 'inline-block', marginRight: 4 }} />
+          {currentLayer.name}
+        </span>
+      )}
       <span>
         View: {view.name ?? 'free'} · {view.ortho ? 'ortho' : 'persp'}
       </span>

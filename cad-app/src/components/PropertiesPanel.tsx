@@ -1,6 +1,33 @@
 import { useEffect, useState } from 'react';
 import { useScene, type Vec3 } from '../store/sceneStore';
 import { findObject, findParent } from '../store/tree';
+
+/** Moves every selected top-level object to the chosen layer. */
+function LayerSelect({ value }: { value: string }) {
+  const layers = useScene((s) => s.layers);
+  return (
+    <label className="field wide">
+      <span>Layer</span>
+      <select
+        value={value}
+        onChange={(e) => {
+          const s = useScene.getState();
+          const ids = s.selection.filter((id) => s.objects.some((o) => o.id === id));
+          const n = s.moveToLayer(ids, e.target.value);
+          const name = s.layers.find((l) => l.id === e.target.value)?.name;
+          if (n) s.print(`Moved ${n} object(s) to layer ${name}.`);
+        }}
+      >
+        {layers.map((l) => (
+          <option key={l.id} value={l.id} disabled={l.locked}>
+            {l.name}
+            {l.locked ? ' (locked)' : ''}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 import { BOOLEAN_LABEL } from '../tools/primitives';
 import { DEG2RAD, RAD2DEG, fromDisplay, toDisplay } from '../units';
 
@@ -84,6 +111,7 @@ export default function PropertiesPanel() {
             }}
           />
         </label>
+        <LayerSelect value={obj.layer ?? '0'} />
         <h3>Dimension ({unit})</h3>
         <p className="dim-value">{r(Math.hypot(d[0], d[1], d[2]))}</p>
         <p className="empty">
@@ -121,6 +149,7 @@ export default function PropertiesPanel() {
         />
       </label>
 
+      {!parent && <LayerSelect value={obj.layer ?? '0'} />}
       {extra > 0 && <p className="note">+{extra} more selected. Boolean uses this one as the base.</p>}
       {parent && (
         <p className="note">

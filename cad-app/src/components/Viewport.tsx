@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import {
   dimOffset,
   isFlatView,
+  shownObjects,
   useScene,
   workPlaneOf,
   type CadObject,
@@ -150,7 +151,9 @@ function Dots({ points, color, size }: { points: Pt[]; color: string; size: numb
 
 /** Object snap candidates for the current scene, rebuilt only when objects change. */
 function useSnapPoints(exclude?: string[]) {
-  const objects = useScene((s) => s.objects);
+  const all = useScene((s) => s.objects);
+  const layers = useScene((s) => s.layers);
+  const objects = useMemo(() => shownObjects(all, layers), [all, layers]);
   const enabled = useScene((s) => s.snap.object);
   const key = exclude?.join(',') ?? '';
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -480,7 +483,8 @@ type Controls = { target: THREE.Vector3; update: () => void };
 
 /** Place the camera looking along `dir` so the whole scene (or a default area) fits the view. */
 function frameCamera(camera: THREE.Camera, controls: Controls, size: { width: number; height: number }, dir: THREE.Vector3) {
-  const box = sceneBounds(useScene.getState().objects) ?? new THREE.Box3(new THREE.Vector3(-500, -500, 0), new THREE.Vector3(500, 500, 500));
+  const st = useScene.getState();
+  const box = sceneBounds(shownObjects(st.objects, st.layers)) ?? new THREE.Box3(new THREE.Vector3(-500, -500, 0), new THREE.Vector3(500, 500, 500));
   const center = box.getCenter(new THREE.Vector3());
   const radius = Math.max(box.getBoundingSphere(new THREE.Sphere()).radius, 50);
   const d = dir.clone().normalize();
@@ -591,7 +595,10 @@ const GRID_ROTATION: Record<WorkPlane, [number, number, number]> = {
 };
 
 export default function Viewport() {
-  const objects = useScene((s) => s.objects);
+  const all = useScene((s) => s.objects);
+  const layers = useScene((s) => s.layers);
+  // Objects on hidden layers are not drawn, picked or snapped to
+  const objects = useMemo(() => shownObjects(all, layers), [all, layers]);
   const selection = useScene((s) => s.selection);
   const unit = useScene((s) => s.unit);
   const tool = useScene((s) => s.tool);

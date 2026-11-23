@@ -42,6 +42,16 @@ export interface DimData {
   offset: Vec3;
 }
 
+export interface Layer {
+  id: string;
+  name: string;
+  color: string;
+  visible: boolean;
+  locked: boolean; // visible and snappable, but cannot be selected or changed
+}
+
+export const DEFAULT_LAYER: Layer = { id: '0', name: '0', color: '#d7dde5', visible: true, locked: false };
+
 export interface CadObject {
   id: string;
   name: string;
@@ -51,6 +61,7 @@ export interface CadObject {
   op?: BooleanOp; // booleans only
   children?: CadObject[]; // booleans only: [base, ...tools], transforms relative to this object
   dim?: DimData; // dimensions only
+  layer?: string; // layer id; missing or unknown = layer '0'
   position: Vec3; // mm
   rotation: Vec3; // radians (XYZ Euler)
   scale: Vec3;
@@ -96,6 +107,8 @@ interface SceneState {
   pickPoints: Vec3[];
   projectName: string;
   view: ViewState;
+  layers: Layer[];
+  currentLayer: string;
   log: string[];
   past: CadObject[][];
   future: CadObject[][];
@@ -130,7 +143,12 @@ interface SceneState {
   zoomExtents: () => void;
   freeOrbit: () => void;
   print: (msg: string) => void;
-  loadProject: (objects: CadObject[], unit: Unit, name: string) => void;
+  addLayer: (name: string, color?: string) => string | null;
+  updateLayer: (id: string, patch: Partial<Omit<Layer, 'id'>>) => void;
+  deleteLayer: (id: string) => void;
+  setCurrentLayer: (id: string) => void;
+  moveToLayer: (ids: string[], layerId: string) => number;
+  loadProject: (objects: CadObject[], unit: Unit, name: string, layers?: Layer[], currentLayer?: string) => void;
   newProject: () => void;
   undo: () => void;
   redo: () => void;
@@ -150,6 +168,25 @@ const withHistory = (s: SceneState) => ({
 });
 
 const sel = (ids: string[]) => ({ selection: ids, selectedId: ids[0] ?? null });
+
+const LAYER_COLORS = ['#8aa4c8', '#e5a85c', '#7cc47f', '#d98cc0', '#e6d36a', '#6cc6cf', '#e07b6e'];
+
+/** Layer of an object; unknown or missing layer ids fall back to layer '0'. */
+export function layerOf(layers: Layer[], o: CadObject): Layer {
+  return layers.find((l) => l.id === (o.layer ?? '0')) ?? layers.find((l) => l.id === '0') ?? DEFAULT_LAYER;
+}
+
+/** Objects that are shown: their own eye is on and their layer is visible. */
+export function shownObjects(objects: CadObject[], layers: Layer[]): CadObject[] {
+  const hidden = new Set(layers.filter((l) => !l.visible).map((l) => l.id));
+  return objects.filter((o) => o.visible && !hidden.has(o.layer ?? '0') && !(o.layer && !layers.some((l) => l.id === o.layer) && hidden.has('0')));
+}
+
+/** True when a top-level object sits on a locked layer (nested boolean parts follow their parent). */
+function isLockedId(s: { objects: CadObject[]; layers: Layer[] }, id: string): boolean {
+  const top = s.objects.find((o) => o.id === id || (o.children && flatten(o.children).some((c) => c.id === id)));
+  return !!top && layerOf(s.layers, top).locked;
+}
 
 /** Keep only selected ids that still exist after an edit/undo. */
 const keepSelection = (s: SceneState, objects: CadObject[]) =>
@@ -208,6 +245,8 @@ export const useScene = create<SceneState>((set, get) => ({
   pickPoints: [],
   projectName: 'untitled',
   view: { name: null, ortho: false, seq: 0, fitSeq: 0 },
+  layers: [DEFAULT_LAYER],
+  currentLayer: '0',
   log: ['Nirman CAD ready. Type HELP for commands.'],
   past: [],
   future: [],
@@ -228,6 +267,7 @@ export const useScene = create<SceneState>((set, get) => ({
         scale: [1, 1, 1],
         color: PALETTE[idx % PALETTE.length],
         visible: true,
+        layer: s.currentLayer,
       };
       return { ...withHistory(s), objects: [...s.objects, obj], ...sel([id]) };
     });
@@ -246,7 +286,8 @@ export const useScene = create<SceneState>((set, get) => ({
   removeSelected: () =>
     set((s) => {
       if (!s.selection.length) return {};
-      const objects = removeIn(s.objects, new Set(s.selection));
+      const ids = s.selection.filter((id) => !isLockedId(s, id));
+      const objects = removeIn(s.objects, new Set(ids));
       return { ...withHistory(s), objects, ...sel([]) };
     }),
 
@@ -265,10 +306,14 @@ export const useScene = create<SceneState>((set, get) => ({
   select: (id, additive = false) =>
     set((s) => {
       if (!id) return sel([]);
+      if (isLockedId(s, id)) {
+        s.print('That object is on a locked layer.');
+        return {};
+      }
       if (!additive) return sel([id]);
       return sel(s.selection.includes(id) ? s.selection.filter((x) => x !== id) : [...s.selection, id]);
     }),
-  setSelection: (ids) => set(sel(ids)),
+  setSelection: (ids) => set((s) => sel(ids.filter((id) => !isLockedId(s, id)))),
 
   booleanOp: (op) => {
     const s = get();
@@ -302,6 +347,7 @@ export const useScene = create<SceneState>((set, get) => ({
       scale: [1, 1, 1],
       color: base.color,
       visible: true,
+      layer: base.layer,
     };
     const used = new Set(parts.map((p) => p.id));
     const baseIdx = s.objects.findIndex((o) => o.id === base.id);
@@ -409,7 +455,7 @@ export const useScene = create<SceneState>((set, get) => ({
       }
       const [base, target] = pts;
       const d: Vec3 = [target[0] - base[0], target[1] - base[1], target[2] - base[2]];
-      const ids = new Set(s.selection.filter((id) => s.objects.some((o) => o.id === id)));
+      const ids = new Set(s.selection.filter((id) => s.objects.some((o) => o.id === id) && !isLockedId(s, id)));
       const objects = s.objects.map((o) =>
         ids.has(o.id) ? { ...o, position: [o.position[0] + d[0], o.position[1] + d[1], o.position[2] + d[2]] as Vec3 } : o,
       );
@@ -461,6 +507,7 @@ export const useScene = create<SceneState>((set, get) => ({
       scale: [1, 1, 1],
       color: '#ffd166',
       visible: true,
+      layer: s.currentLayer,
     };
     set((st) => ({ ...withHistory(st), objects: [...st.objects, obj] }));
     s.print(`${obj.name}: ${Math.round(toDisplay(len, s.unit) * 1000) / 1000} ${s.unit}`);
@@ -505,11 +552,84 @@ export const useScene = create<SceneState>((set, get) => ({
   freeOrbit: () => set((s) => (s.view.name === null ? {} : { view: { ...s.view, name: null } })),
   print: (msg) => set((s) => ({ log: [...s.log, msg].slice(-LOG_LIMIT) })),
 
-  loadProject: (objects, unit, name) =>
-    set({ objects, unit, projectName: name, tool: 'select', sketchPoints: [], past: [], future: [], ...sel([]) }),
+  addLayer: (name, color) => {
+    const s = get();
+    const clean = name.replace(/[\r\n\t]/g, ' ').trim().slice(0, 64);
+    if (!clean) return null;
+    if (s.layers.some((l) => l.name.toLowerCase() === clean.toLowerCase())) {
+      s.print(`Error: layer "${clean}" already exists.`);
+      return null;
+    }
+    const id = `ly_${newId()}`;
+    const layer: Layer = { id, name: clean, color: color ?? LAYER_COLORS[s.layers.length % LAYER_COLORS.length], visible: true, locked: false };
+    set({ layers: [...s.layers, layer], currentLayer: id });
+    return id;
+  },
+
+  updateLayer: (id, patch) =>
+    set((s) => {
+      const layers = s.layers.map((l) => (l.id === id ? { ...l, ...patch, ...(id === '0' && patch.name ? { name: '0' } : {}) } : l));
+      // Hiding or locking a layer drops its objects from the selection
+      const blocked = new Set(layers.filter((l) => !l.visible || l.locked).map((l) => l.id));
+      const selection = s.selection.filter((sid) => {
+        const o = s.objects.find((x) => x.id === sid);
+        return !o || !blocked.has(o.layer ?? '0');
+      });
+      return { layers, ...sel(selection) };
+    }),
+
+  deleteLayer: (id) => {
+    const s = get();
+    if (id === '0') return s.print("Error: layer '0' can't be deleted.");
+    const layer = s.layers.find((l) => l.id === id);
+    if (!layer) return;
+    const moved = s.objects.filter((o) => o.layer === id).length;
+    set({
+      ...(moved ? withHistory(s) : {}),
+      objects: moved ? s.objects.map((o) => (o.layer === id ? { ...o, layer: '0' } : o)) : s.objects,
+      layers: s.layers.filter((l) => l.id !== id),
+      currentLayer: s.currentLayer === id ? '0' : s.currentLayer,
+    });
+    s.print(`Deleted layer ${layer.name}${moved ? `; ${moved} object(s) moved to layer 0` : ''}.`);
+  },
+
+  setCurrentLayer: (id) => set((s) => (s.layers.some((l) => l.id === id) ? { currentLayer: id } : {})),
+
+  moveToLayer: (ids, layerId) => {
+    const s = get();
+    if (!s.layers.some((l) => l.id === layerId)) return 0;
+    const move = new Set(ids.filter((id) => s.objects.some((o) => o.id === id)));
+    if (!move.size) return 0;
+    set({ ...withHistory(s), objects: s.objects.map((o) => (move.has(o.id) ? { ...o, layer: layerId } : o)) });
+    return move.size;
+  },
+
+  loadProject: (objects, unit, name, layers, currentLayer) =>
+    set({
+      objects,
+      unit,
+      projectName: name,
+      layers: layers?.length ? layers : [DEFAULT_LAYER],
+      currentLayer: currentLayer && layers?.some((l) => l.id === currentLayer) ? currentLayer : '0',
+      tool: 'select',
+      sketchPoints: [],
+      past: [],
+      future: [],
+      ...sel([]),
+    }),
 
   newProject: () =>
-    set({ objects: [], tool: 'select', sketchPoints: [], projectName: 'untitled', past: [], future: [], ...sel([]) }),
+    set({
+      objects: [],
+      layers: [DEFAULT_LAYER],
+      currentLayer: '0',
+      tool: 'select',
+      sketchPoints: [],
+      projectName: 'untitled',
+      past: [],
+      future: [],
+      ...sel([]),
+    }),
 
   undo: () => {
     const s = get();

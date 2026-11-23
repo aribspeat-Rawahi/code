@@ -1,4 +1,4 @@
-import { newId, type CadObject, type Vec3 } from '../store/sceneStore';
+import { DEFAULT_LAYER, newId, type CadObject, type Layer, type Vec3 } from '../store/sceneStore';
 import { BOOLEAN_OPS, DEFAULT_PARAMS, OBJECT_TYPES, type BooleanOp, type ObjectType, type Params } from '../tools/primitives';
 import type { Pt } from '../tools/sketch';
 import type { Unit } from '../units';
@@ -10,8 +10,34 @@ const MAX_PROFILE_POINTS = 10_000;
 const UNITS: Unit[] = ['mm', 'cm', 'm'];
 const MAX_DEPTH = 32;
 
-export function serializeProject(objects: CadObject[], unit: Unit): string {
-  return JSON.stringify({ format: FORMAT, version: VERSION, unit, objects }, null, 2);
+export function serializeProject(objects: CadObject[], unit: Unit, layers: Layer[] = [DEFAULT_LAYER], currentLayer = '0'): string {
+  return JSON.stringify({ format: FORMAT, version: VERSION, unit, layers, currentLayer, objects }, null, 2);
+}
+
+const MAX_LAYERS = 1000;
+
+/** Validate the untrusted layer table; layer '0' always exists. */
+function sanitizeLayers(raw: unknown): Layer[] {
+  const out: Layer[] = [];
+  const seen = new Set<string>();
+  if (Array.isArray(raw)) {
+    for (const l of raw.slice(0, MAX_LAYERS)) {
+      if (!l || typeof l !== 'object') continue;
+      const r = l as Record<string, unknown>;
+      if (typeof r.id !== 'string' || !/^[\w-]{1,64}$/.test(r.id) || seen.has(r.id)) continue;
+      const name = typeof r.name === 'string' ? r.name.replace(/[\r\n\t]/g, ' ').trim().slice(0, 64) : '';
+      seen.add(r.id);
+      out.push({
+        id: r.id,
+        name: r.id === '0' ? '0' : name || r.id,
+        color: typeof r.color === 'string' && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : DEFAULT_LAYER.color,
+        visible: r.visible !== false,
+        locked: r.locked === true,
+      });
+    }
+  }
+  if (!seen.has('0')) out.unshift(DEFAULT_LAYER);
+  return out;
 }
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -77,6 +103,7 @@ function sanitizeObject(raw: unknown, usedIds: Set<string>, depth = 0): CadObjec
     op,
     children,
     dim,
+    layer: typeof o.layer === 'string' && /^[\w-]{1,64}$/.test(o.layer) ? o.layer : '0',
     position: vec3(o.position, [0, 0, 0]),
     rotation: vec3(o.rotation, [0, 0, 0]),
     scale,
@@ -85,7 +112,7 @@ function sanitizeObject(raw: unknown, usedIds: Set<string>, depth = 0): CadObjec
   };
 }
 
-export function parseProject(text: string): { unit: Unit; objects: CadObject[]; skipped: number } {
+export function parseProject(text: string): { unit: Unit; objects: CadObject[]; skipped: number; layers: Layer[]; currentLayer: string } {
   let data: unknown;
   try {
     data = JSON.parse(text);
@@ -101,5 +128,10 @@ export function parseProject(text: string): { unit: Unit; objects: CadObject[]; 
   const used = new Set<string>();
   const objects = d.objects.map((o) => sanitizeObject(o, used)).filter((o): o is CadObject => o !== null);
   const unit = UNITS.includes(d.unit as Unit) ? (d.unit as Unit) : 'mm';
-  return { unit, objects, skipped: d.objects.length - objects.length };
+  const layers = sanitizeLayers(d.layers);
+  const ids = new Set(layers.map((l) => l.id));
+  // Objects pointing at a layer that isn't in the table go to layer 0
+  for (const o of objects) if (!ids.has(o.layer ?? '0')) o.layer = '0';
+  const currentLayer = typeof d.currentLayer === 'string' && ids.has(d.currentLayer) ? d.currentLayer : '0';
+  return { unit, objects, skipped: d.objects.length - objects.length, layers, currentLayer };
 }

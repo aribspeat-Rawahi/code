@@ -1,4 +1,4 @@
-import { useScene } from '../store/sceneStore';
+import { shownObjects, useScene } from '../store/sceneStore';
 import { exportMesh } from './export';
 import { buildDxf, type DxfView } from '../tools/dxf';
 import { parseProject, serializeProject } from './project';
@@ -48,7 +48,7 @@ const confirmDiscard = () =>
 export async function saveProject(): Promise<void> {
   const s = useScene.getState();
   try {
-    const path = await saveData('project', s.projectName, serializeProject(s.objects, s.unit));
+    const path = await saveData('project', s.projectName, serializeProject(s.objects, s.unit, s.layers, s.currentLayer));
     if (!path) return print('Save cancelled.');
     s.setProjectName(baseName(path));
     print(`Saved ${path}`);
@@ -62,8 +62,8 @@ export async function openProject(): Promise<void> {
   try {
     const file = await openText();
     if (!file) return print('Open cancelled.');
-    const { unit, objects, skipped } = parseProject(file.text);
-    useScene.getState().loadProject(objects, unit, baseName(file.name));
+    const { unit, objects, skipped, layers, currentLayer } = parseProject(file.text);
+    useScene.getState().loadProject(objects, unit, baseName(file.name), layers, currentLayer);
     print(`Opened ${file.name}: ${objects.length} objects${skipped ? `, ${skipped} invalid skipped` : ''}.`);
   } catch (e) {
     print(`Error: ${errMsg(e)}`);
@@ -72,7 +72,7 @@ export async function openProject(): Promise<void> {
 
 export async function exportModel(kind: 'stl' | 'obj'): Promise<void> {
   const s = useScene.getState();
-  const visible = s.objects.filter((o) => o.visible && o.type !== 'dimension');
+  const visible = shownObjects(s.objects, s.layers).filter((o) => o.type !== 'dimension');
   if (!visible.length) return print('Nothing visible to export.');
   try {
     const path = await saveData(kind, s.projectName, exportMesh(visible, kind));
@@ -87,9 +87,10 @@ export async function exportDxf(view?: DxfView): Promise<void> {
   const s = useScene.getState();
   const current = s.view.name && s.view.name !== 'iso' ? s.view.name : null;
   const v: DxfView = view ?? current ?? 'top';
-  if (!s.objects.some((o) => o.visible)) return print('Nothing visible to export.');
+  const shown = shownObjects(s.objects, s.layers);
+  if (!shown.length) return print('Nothing visible to export.');
   try {
-    const { dxf, lines, hidden } = buildDxf(s.objects, v, s.unit);
+    const { dxf, lines, hidden } = buildDxf(shown, v, s.unit, s.layers);
     const path = await saveData('dxf', `${s.projectName}-${v}`, dxf);
     print(
       path

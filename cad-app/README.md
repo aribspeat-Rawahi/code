@@ -60,3 +60,12 @@ View bar (top-left of the viewport) or keys: `1` Top · `2` Front · `3` Right �
 - Layers: `VISIBLE` (continuous), `HIDDEN` (dashed — e.g. door jambs under the wall top in plan, holes in an elevation), `DIMENSIONS`.
 - Lines are the model's hard edges plus silhouettes for that view; hidden parts are found by ray tests against the model.
 - Dimension text uses the unit chosen in the app; geometry is always in mm.
+
+## Layers
+Layers panel (bottom-left): `+ Layer`, click a name to make it **current** (new objects go there), double-click to rename,
+👁 show/hide, 🔒 lock, × delete (objects move to layer `0`; layer `0` can't be deleted). Colour swatch = DXF layer colour.
+- Hidden layers are not drawn, snapped to, fitted, or exported (STL/OBJ/DXF).
+- Locked layers stay visible and snappable but can't be selected, moved or deleted — handy for a reference plan.
+- Move objects: Properties → Layer, or `CHLAYER name`.
+- Commands: `LAYER NEW|SET|ON|OFF|LOCK|UNLOCK|DEL name`, `LAYER LIST`.
+- DXF export writes one DXF layer per app layer (plus a dashed `NAME_HIDDEN` layer), colour mapped to the nearest ACI.
