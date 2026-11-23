@@ -4,7 +4,8 @@ import ObjectTree from './components/ObjectTree';
 import PropertiesPanel from './components/PropertiesPanel';
 import Viewport from './components/Viewport';
 import CommandLine from './components/CommandLine';
-import { useScene } from './store/sceneStore';
+import ViewBar from './components/ViewBar';
+import { isFlatView, useScene } from './store/sceneStore';
 import { newProject, openProject, saveProject } from './io/files';
 import { toDisplay, type Unit } from './units';
 import { SNAP_COLOR, SNAP_LABEL } from './tools/snap';
@@ -61,6 +62,28 @@ function useShortcuts() {
         return;
       }
 
+      // Views work in every tool
+      const VIEW_KEYS: Record<string, 'top' | 'front' | 'right' | 'left' | 'back' | 'iso'> = {
+        '1': 'top',
+        '2': 'front',
+        '3': 'right',
+        '4': 'left',
+        '5': 'back',
+        '0': 'iso',
+      };
+      if (VIEW_KEYS[k]) {
+        s.setView(VIEW_KEYS[k]);
+        return;
+      }
+      if (k === 'f') {
+        s.zoomExtents();
+        return;
+      }
+      if (k === 'p') {
+        s.setProjection(!s.view.ortho);
+        return;
+      }
+
       if (s.tool === 'sketch') {
         if (k === 'enter') s.finishSketch();
         else if (k === 'backspace') s.popSketchPoint();
@@ -95,6 +118,8 @@ function StatusBar() {
   const cursor = useScene((s) => s.cursor);
   const last = useScene((s) => s.sketchPoints.at(-1));
   const pick = useScene((s) => s.pick);
+  const view = useScene((s) => s.view);
+  const flat = isFlatView(view);
   const base = useScene((s) => s.pickPoints.at(-1));
 
   const d = (mm: number) => Math.round(toDisplay(mm, unit) * 1000) / 1000;
@@ -123,7 +148,9 @@ function StatusBar() {
     pickmove: base ? 'Click the target point · Esc cancel' : 'Click the base point on the object · Esc cancel',
     measure: base ? 'Click the second point · Esc restart' : 'Click the first point · Esc to finish',
     dimension: 'Click point 1, point 2, then where the dimension line goes · Esc to finish',
-    select: 'Orbit: left-drag · Pan: right-drag · W/E/R transform · M move · Q measure · D dimension · S sketch · Space command',
+    select: flat
+      ? '2D view: left-drag pan · wheel zoom · 0 = Iso to orbit · F fit · M move · Q measure · D dimension'
+      : 'Orbit: left-drag · Pan: right-drag · 1-5/0 views · F fit · W/E/R transform · M move · Q measure · D dim · S sketch',
   };
 
   return (
@@ -151,6 +178,9 @@ function StatusBar() {
       >
         OSnap {snap.object ? 'on' : 'off'}
       </button>
+      <span>
+        View: {view.name ?? 'free'} · {view.ortho ? 'ortho' : 'persp'}
+      </span>
       <span>Tool: {tool === 'select' ? mode : { sketch: 'sketch', pickmove: 'move by points', measure: 'measure', dimension: 'dimension' }[tool]}</span>
       {pick?.kind && (
         <span className="snap-kind" style={{ color: SNAP_COLOR[pick.kind] }}>
@@ -177,6 +207,7 @@ export default function App() {
       <main className="viewport">
         <div className="canvas-wrap">
           <Viewport />
+          <ViewBar />
         </div>
         <CommandLine />
       </main>

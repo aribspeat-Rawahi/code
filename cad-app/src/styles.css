@@ -145,3 +145,13 @@ select { padding: 4px 6px; }
 .menu-pop button:hover { background: var(--panel-2); }
 .menu-pop small { color: var(--muted); }
 .menu-pop hr { border: none; border-top: 1px solid var(--border); margin: 4px 0; width: 100%; }
+
+.viewbar {
+  position: absolute; top: 8px; left: 8px; z-index: 5;
+  display: flex; gap: 2px; padding: 3px;
+  background: rgba(37, 43, 51, 0.9); border: 1px solid var(--border); border-radius: 6px;
+}
+.viewbar button { font-size: 12px; padding: 3px 7px; border-color: transparent; background: transparent; }
+.viewbar button:hover { border-color: var(--border); }
+.viewbar button.active { background: var(--accent-bg); border-color: var(--accent); }
+.viewbar .sep { width: 1px; background: var(--border); margin: 2px 3px; }

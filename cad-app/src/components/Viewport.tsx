@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
-import { GizmoHelper, Html, GizmoViewport, Grid, Line, OrbitControls, TransformControls } from '@react-three/drei';
+import { GizmoHelper, Html, OrthographicCamera, PerspectiveCamera, GizmoViewport, Grid, Line, OrbitControls, TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
-import { dimOffset, useScene, type CadObject, type Vec3 } from '../store/sceneStore';
+import {
+  dimOffset,
+  isFlatView,
+  useScene,
+  workPlaneOf,
+  type CadObject,
+  type ViewName,
+  type Vec3,
+  type WorkPlane,
+} from '../store/sceneStore';
+import { sceneBounds } from '../tools/bounds';
 import { buildObjectGeometry } from '../tools/geometry';
 import { featureEdges } from '../tools/edges';
 
@@ -174,15 +184,24 @@ function Dots3({ points, color, size }: { points: Vec3[]; color: string; size: n
 }
 
 /** Invisible ground plane that receives pointer events for picking tools. */
+const PLANE_ROTATION: Record<WorkPlane, [number, number, number]> = {
+  xy: [0, 0, 0],
+  xz: [Math.PI / 2, 0, 0],
+  yz: [0, Math.PI / 2, 0],
+};
+
 function PickPlane({
   onMove,
   onPick,
+  plane = 'xy',
 }: {
   onMove: (e: ThreeEvent<PointerEvent>) => void;
   onPick: (e: ThreeEvent<MouseEvent>) => void;
+  plane?: WorkPlane;
 }) {
   return (
     <mesh
+      rotation={PLANE_ROTATION[plane]}
       onPointerMove={(e) => {
         e.stopPropagation();
         onMove(e);
@@ -389,6 +408,7 @@ function PickLayer() {
   const size = useThree((s) => s.size);
   // A moved object's own points are valid for the base, not for the target
   const snapPoints = useSnapPoints(tool === 'pickmove' && pts.length ? selection : undefined);
+  const plane = useScene((s) => workPlaneOf(s.view));
 
   const resolve = (e: ThreeEvent<PointerEvent | MouseEvent>): Vec3 => {
     const s = useScene.getState();
@@ -397,8 +417,11 @@ function PickLayer() {
     if (hit) {
       p = [hit.p.x, hit.p.y, hit.p.z];
     } else {
-      p = [e.point.x, e.point.y, 0];
-      if (s.snap.enabled) p = [snapValue(p[0], s.snap.step), snapValue(p[1], s.snap.step), 0];
+      // Free point on the work plane (XY in plan, XZ/YZ in elevations), grid-snapped in-plane
+      const normal = plane === 'xy' ? 2 : plane === 'xz' ? 1 : 0;
+      p = [e.point.x, e.point.y, e.point.z];
+      p[normal] = 0;
+      if (s.snap.enabled) p = p.map((v, i) => (i === normal ? v : snapValue(v, s.snap.step))) as Vec3;
     }
     s.setPick({ point: p, kind: hit?.kind ?? null });
     return p;
@@ -411,7 +434,7 @@ function PickLayer() {
 
   return (
     <group>
-      <PickPlane onMove={(e) => resolve(e)} onPick={(e) => useScene.getState().addPickPoint(resolve(e))} />
+      <PickPlane plane={plane} onMove={(e) => resolve(e)} onPick={(e) => useScene.getState().addPickPoint(resolve(e))} />
 
       {/* Move: live preview of where the selection will land */}
       {tool === 'pickmove' && d && (
@@ -444,12 +467,138 @@ function PickLayer() {
   );
 }
 
+const VIEW_DIR: Record<ViewName, [number, number, number]> = {
+  top: [0, -1e-4, 1], // tiny Y offset keeps "up" well defined with a Z-up camera
+  front: [0, -1, 0],
+  back: [0, 1, 0],
+  left: [-1, 0, 0],
+  right: [1, 0, 0],
+  iso: [1, -1, 0.8],
+};
+
+type Controls = { target: THREE.Vector3; update: () => void };
+
+/** Place the camera looking along `dir` so the whole scene (or a default area) fits the view. */
+function frameCamera(camera: THREE.Camera, controls: Controls, size: { width: number; height: number }, dir: THREE.Vector3) {
+  const box = sceneBounds(useScene.getState().objects) ?? new THREE.Box3(new THREE.Vector3(-500, -500, 0), new THREE.Vector3(500, 500, 500));
+  const center = box.getCenter(new THREE.Vector3());
+  const radius = Math.max(box.getBoundingSphere(new THREE.Sphere()).radius, 50);
+  const d = dir.clone().normalize();
+
+  if (camera instanceof THREE.OrthographicCamera) {
+    const dist = radius * 4 + 1000;
+    camera.position.copy(center).addScaledVector(d, dist);
+    camera.near = 0.1;
+    camera.far = dist + radius * 8 + 1e5;
+    camera.zoom = Math.min(size.width, size.height) / (radius * 2.3);
+    camera.updateProjectionMatrix();
+  } else if (camera instanceof THREE.PerspectiveCamera) {
+    const dist = (radius / Math.sin((camera.fov * Math.PI) / 360)) * 1.05;
+    camera.position.copy(center).addScaledVector(d, dist);
+    camera.updateProjectionMatrix();
+  }
+  camera.lookAt(center);
+  controls.target.copy(center);
+  controls.update();
+}
+
+/**
+ * Applies named views, zoom extents, and keeps the pose when switching perspective/orthographic.
+ *
+ * Switching projection mounts a new camera, and drei then builds a new OrbitControls for it.
+ * We wait until the controls belong to the current camera, and carry the orbit target across
+ * ourselves (a fresh OrbitControls would otherwise start from its default target).
+ */
+function CameraRig() {
+  const view = useScene((s) => s.view);
+  const camera = useThree((s) => s.camera);
+  const controls = useThree((s) => s.controls) as unknown as
+    | (Controls & {
+        object: THREE.Camera;
+        addEventListener: (type: 'change', fn: () => void) => void;
+        removeEventListener: (type: 'change', fn: () => void) => void;
+      })
+    | null;
+  const size = useThree((s) => s.size);
+  const prevCam = useRef<THREE.Camera | null>(null);
+  const prevControls = useRef<unknown>(null);
+  const lastTarget = useRef(new THREE.Vector3(250, 0, 0));
+  const pendingView = useRef(false);
+
+  useEffect(() => {
+    if (view.seq > 0) pendingView.current = true;
+  }, [view.seq]);
+
+  // Remember the target as the user pans/orbits
+  useEffect(() => {
+    if (!controls) return;
+    const onChange = () => lastTarget.current.copy(controls.target);
+    controls.addEventListener('change', onChange);
+    return () => controls.removeEventListener('change', onChange);
+  }, [controls]);
+
+  useEffect(() => {
+    if (!controls || controls.object !== camera) return; // controls for the new camera not ready yet
+    const prev = prevCam.current;
+    const controlsChanged = prevControls.current !== controls;
+    prevCam.current = camera;
+    prevControls.current = controls;
+
+    if (pendingView.current && view.name) {
+      frameCamera(camera, controls, size, new THREE.Vector3(...VIEW_DIR[view.name]));
+      if ((camera instanceof THREE.OrthographicCamera) === view.ortho) pendingView.current = false;
+    } else if (prev && prev !== camera) {
+      // Projection toggled: same direction and target, roughly the same apparent size
+      const target = lastTarget.current.clone();
+      const offset = prev.position.clone().sub(target);
+      const dir = offset.clone().normalize();
+      const fovTan = Math.tan((45 * Math.PI) / 360);
+      if (camera instanceof THREE.OrthographicCamera) {
+        const dist = offset.length();
+        camera.zoom = size.height / (2 * dist * fovTan);
+        camera.near = 0.1;
+        camera.far = 1e7;
+        camera.position.copy(target).addScaledVector(dir, Math.max(dist, 5000));
+      } else if (prev instanceof THREE.OrthographicCamera) {
+        camera.position.copy(target).addScaledVector(dir, size.height / (2 * prev.zoom * fovTan));
+      }
+      (camera as THREE.PerspectiveCamera | THREE.OrthographicCamera).updateProjectionMatrix();
+      camera.lookAt(target);
+      controls.target.copy(target);
+      controls.update();
+    } else if (controlsChanged) {
+      controls.target.copy(lastTarget.current);
+      controls.update();
+    }
+    lastTarget.current.copy(controls.target);
+  }, [camera, controls, view.seq, view.name, view.ortho, size]);
+
+  useEffect(() => {
+    if (view.fitSeq === 0 || !controls) return;
+    const dir = camera.position.clone().sub(controls.target);
+    frameCamera(camera, controls, size, dir.lengthSq() > 0 ? dir : new THREE.Vector3(...VIEW_DIR.iso));
+    lastTarget.current.copy(controls.target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.fitSeq]);
+
+  return null;
+}
+
+const GRID_ROTATION: Record<WorkPlane, [number, number, number]> = {
+  xy: [Math.PI / 2, 0, 0], // drei Grid lies in XZ by default
+  xz: [0, 0, 0],
+  yz: [0, 0, Math.PI / 2],
+};
+
 export default function Viewport() {
   const objects = useScene((s) => s.objects);
   const selection = useScene((s) => s.selection);
   const unit = useScene((s) => s.unit);
   const tool = useScene((s) => s.tool);
   const select = useScene((s) => s.select);
+  const view = useScene((s) => s.view);
+  const flat = isFlatView(view);
+  const plane = workPlaneOf(view);
 
   // Grid spacing follows the working unit (values in mm)
   const grid = unit === 'm' ? { cell: 100, section: 1000 } : { cell: 10, section: 100 };
@@ -457,19 +606,24 @@ export default function Viewport() {
   return (
     <Canvas
       className={`viewport-canvas ${tool !== 'select' ? 'sketching' : ''}`}
-      camera={{ position: [650, -750, 550], up: [0, 0, 1], fov: 45, near: 1, far: 1e6 }}
       onPointerMissed={() => {
         if (performance.now() - lastGizmoUse > 250) select(null);
       }}
     >
+      {view.ortho ? (
+        <OrthographicCamera makeDefault up={[0, 0, 1]} position={[650, -750, 550]} near={0.1} far={1e7} zoom={1} />
+      ) : (
+        <PerspectiveCamera makeDefault up={[0, 0, 1]} position={[650, -750, 550]} fov={45} near={1} far={1e6} />
+      )}
+      <CameraRig />
       <color attach="background" args={['#22272e']} />
       <hemisphereLight args={['#ffffff', '#444444', 0.6]} />
       <directionalLight position={[600, -400, 1000]} intensity={1.4} />
       <directionalLight position={[-500, 600, 300]} intensity={0.4} />
 
-      {/* drei Grid lies in XZ; rotate it into the XY ground plane */}
+      {/* The grid sits on the work plane: ground in plan/3D, the elevation plane in front/side views */}
       <Grid
-        rotation={[Math.PI / 2, 0, 0]}
+        rotation={GRID_ROTATION[plane]}
         infiniteGrid
         cellSize={grid.cell}
         sectionSize={grid.section}
@@ -477,7 +631,7 @@ export default function Viewport() {
         sectionColor="#56606e"
         cellThickness={0.6}
         sectionThickness={1}
-        fadeDistance={unit === 'm' ? 40000 : 4000}
+        fadeDistance={view.ortho ? 1e7 : unit === 'm' ? 40000 : 4000}
         fadeStrength={1.5}
       />
       <axesHelper args={[grid.section]} />
@@ -498,7 +652,26 @@ export default function Viewport() {
       {tool === 'sketch' && <SketchLayer />}
       {(tool === 'pickmove' || tool === 'measure' || tool === 'dimension') && <PickLayer />}
 
-      <OrbitControls makeDefault enableDamping={false} target={[250, 0, 0]} />
+      <OrbitControls
+        makeDefault
+        enableDamping={false}
+        // Plan/elevation: no tumbling, left-drag pans like a 2D drafting view
+        enableRotate={!flat}
+        mouseButtons={{
+          LEFT: flat ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE,
+          MIDDLE: THREE.MOUSE.DOLLY,
+          RIGHT: THREE.MOUSE.PAN,
+        }}
+        onEnd={(e) => {
+          // Orbiting away from a named view makes it a free view (work plane back to XY)
+          const s = useScene.getState();
+          if (!s.view.name || isFlatView(s.view)) return;
+          const ctl = (e as unknown as { target?: { object: THREE.Camera; target: THREE.Vector3 } })?.target;
+          if (!ctl) return;
+          const dir = ctl.object.position.clone().sub(ctl.target).normalize();
+          if (dir.dot(new THREE.Vector3(...VIEW_DIR[s.view.name]).normalize()) < 0.999) s.freeOrbit();
+        }}
+      />
       <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
         <GizmoViewport axisColors={['#e5534b', '#57ab5a', '#539bf5']} labelColor="#ffffff" />
       </GizmoHelper>

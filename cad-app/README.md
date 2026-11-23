@@ -46,3 +46,10 @@ Tip: `SELECT Wall 1, Door 1` then `SUBTRACT` cuts a door opening.
 - Dimensions are saved with the project, follow the unit setting, and are skipped by STL/OBJ export.
   They record fixed points (not linked to objects): if an object changes, re-dimension it.
 - File actions (New/Open/Save/Export) are under **File ▾**.
+
+## Views
+View bar (top-left of the viewport) or keys: `1` Top · `2` Front · `3` Right · `4` Left · `5` Back · `0` Iso · `P` ortho/persp · `F` fit.
+- Top/Front/Side open in **orthographic** (true lengths). Rotation is locked and left-drag pans, like a 2D drafting view.
+- The work plane follows the view: XY in plan, XZ in front/back, YZ in side views — so Move/Dist/Dim clicks land on that plane.
+- Sketch always draws on the ground: starting it from an elevation switches to Top.
+- Commands: `VIEW top|front|right|left|back|iso`, `ORTHO`, `PERSP`, `ZOOM` / `FIT`.

@@ -18,6 +18,22 @@ export type Vec3 = [number, number, number];
 export type TransformMode = 'translate' | 'rotate' | 'scale';
 export type Tool = 'select' | 'sketch' | 'pickmove' | 'measure' | 'dimension';
 export type PickTool = 'pickmove' | 'measure' | 'dimension';
+export type ViewName = 'top' | 'front' | 'back' | 'left' | 'right' | 'iso';
+/** Plane that picking and the grid use: XY (plan), XZ (front/back elevation), YZ (side elevation). */
+export type WorkPlane = 'xy' | 'xz' | 'yz';
+
+export interface ViewState {
+  name: ViewName | null; // null = free orbit
+  ortho: boolean;
+  seq: number; // bumps when a named view is requested
+  fitSeq: number; // bumps on zoom extents
+}
+
+export const workPlaneOf = (v: ViewState): WorkPlane =>
+  v.name === 'front' || v.name === 'back' ? 'xz' : v.name === 'left' || v.name === 'right' ? 'yz' : 'xy';
+
+/** 2D drafting views: orthographic plan or elevation, where rotation is locked and left-drag pans. */
+export const isFlatView = (v: ViewState) => v.ortho && v.name !== null && v.name !== 'iso';
 
 /** Aligned dimension: measured points a, b and the offset vector to the dimension line (all mm, relative to position). */
 export interface DimData {
@@ -79,6 +95,7 @@ interface SceneState {
   /** Points picked so far by the active pick tool (move: base; measure: start; dimension: a, b). */
   pickPoints: Vec3[];
   projectName: string;
+  view: ViewState;
   log: string[];
   past: CadObject[][];
   future: CadObject[][];
@@ -108,6 +125,10 @@ interface SceneState {
   addDimension: (a: Vec3, b: Vec3, offset?: Vec3) => string | null;
   autoDimension: (id: string) => number;
   setProjectName: (name: string) => void;
+  setView: (name: ViewName, ortho?: boolean) => void;
+  setProjection: (ortho: boolean) => void;
+  zoomExtents: () => void;
+  freeOrbit: () => void;
   print: (msg: string) => void;
   loadProject: (objects: CadObject[], unit: Unit, name: string) => void;
   newProject: () => void;
@@ -186,6 +207,7 @@ export const useScene = create<SceneState>((set, get) => ({
   pick: null,
   pickPoints: [],
   projectName: 'untitled',
+  view: { name: null, ortho: false, seq: 0, fitSeq: 0 },
   log: ['Nirman CAD ready. Type HELP for commands.'],
   past: [],
   future: [],
@@ -318,6 +340,9 @@ export const useScene = create<SceneState>((set, get) => ({
   setTool: (tool) =>
     set((s) => ({
       tool,
+      ...(tool === 'sketch' && workPlaneOf(s.view) !== 'xy'
+        ? { view: { ...s.view, name: 'top' as ViewName, ortho: true, seq: s.view.seq + 1 } }
+        : {}),
       sketchPoints: [],
       cursor: null,
       pick: null,
@@ -469,6 +494,15 @@ export const useScene = create<SceneState>((set, get) => ({
   },
 
   setProjectName: (projectName) => set({ projectName }),
+
+  // Plan and elevations default to orthographic (true lengths); iso keeps the current projection
+  setView: (name, ortho) =>
+    set((s) => ({
+      view: { ...s.view, name, ortho: ortho ?? (name === 'iso' ? s.view.ortho : true), seq: s.view.seq + 1 },
+    })),
+  setProjection: (ortho) => set((s) => ({ view: { ...s.view, ortho } })),
+  zoomExtents: () => set((s) => ({ view: { ...s.view, fitSeq: s.view.fitSeq + 1 } })),
+  freeOrbit: () => set((s) => (s.view.name === null ? {} : { view: { ...s.view, name: null } })),
   print: (msg) => set((s) => ({ log: [...s.log, msg].slice(-LOG_LIMIT) })),
 
   loadProject: (objects, unit, name) =>

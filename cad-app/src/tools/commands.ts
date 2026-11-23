@@ -15,6 +15,7 @@ const HELP = [
   'UNION  SUBTRACT  INTERSECT  (on the selection; first selected = base)   EXPLODE',
   'SELECT name[, name2, ...]  selects several, in order (e.g. SELECT Wall 1, Box 1)',
   'OSNAP on|off  (object snap, F3)',
+  'VIEW top|front|right|left|back|iso (keys 1-5, 0)   ORTHO   PERSP (P)   ZOOM / FIT (F) = zoom extents',
   'DIST (pick 2 points) or DIST x1 y1 x2 y2 / x1 y1 z1 x2 y2 z2     DIM (pick a, b, then line position)',
   'DIM x1 y1 x2 y2 [offset]     AUTODIM (width/depth/height of the selected object)',
   'UNDO  REDO  UNITS mm|cm|m  SNAP on|off|step  NEW  OPEN  SAVE  EXPORT stl|obj',
@@ -325,6 +326,24 @@ export async function runCommand(raw: string): Promise<void> {
       if (n) print(`Added ${n} dimensions to ${o.name}.`);
       return;
     }
+
+    case 'VIEW': {
+      const v = args[0]?.toLowerCase();
+      const names = ['top', 'front', 'right', 'left', 'back', 'iso'] as const;
+      if (!names.includes(v as (typeof names)[number])) return print('Usage: VIEW top|front|right|left|back|iso');
+      st().setView(v as (typeof names)[number]);
+      return;
+    }
+    case 'ORTHO':
+      st().setProjection(true);
+      return print('Orthographic projection (true lengths).');
+    case 'PERSP':
+      st().setProjection(false);
+      return print('Perspective projection.');
+    case 'ZOOM':
+    case 'FIT':
+      st().zoomExtents();
+      return;
 
     case 'OSNAP': {
       const a = args[0]?.toLowerCase();
